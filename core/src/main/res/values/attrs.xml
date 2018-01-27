@@ -1,10 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
 
-    <attr name="color_accent_secondary" format="color"/>
-
     <attr name="card_background" format="color"/>
-    <attr name="card_ripple" format="color"/>
+    <attr name="ripple_color" format="color"/>
 
     <attr name="ripple_accent" format="color"/>
     <attr name="main_background" format="color"/>
@@ -12,20 +10,13 @@
     <attr name="toolbar_icon" format="color"/>
     <attr name="toolbar_accent" format="color"/>
 
-    <attr name="divider_list" format="color"/>
-
-    <attr name="hint_text" format="color"/>
-    <attr name="error_text" format="color"/>
-
-
     <attr name="tab_indicator" format="color"/>
     <attr name="tab_text" format="color"/>
     <attr name="tab_text_selected" format="color"/>
 
-    <attr name="home_title" format="color"/>
-
-    <attr name="search_toolbar" format="color"/>
-    <attr name="search_toolbar_icon" format="color"/>
-    <attr name="search_toolbar_hint" format="color"/>
+    <declare-styleable name="HeaderView">
+        <attr name="widthRatio" format="integer"/>
+        <attr name="heightRatio" format="integer"/>
+    </declare-styleable>
 
 </resources>

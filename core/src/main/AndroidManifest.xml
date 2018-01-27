@@ -32,6 +32,8 @@
     <uses-permission android:name="android.permission.WAKE_LOCK" />
 
     <application>
+        <meta-data android:name="android.max_aspect" android:value="2.1" />
+
         <activity android:name=".activities.CandyBarCrashReport"
             android:launchMode="singleInstance"
             android:noHistory="true"
@@ -40,9 +42,12 @@
         <activity android:name=".activities.CandyBarWallpaperActivity"
             android:launchMode="singleTop"
             android:theme="@style/WallpaperTheme"
-            android:configChanges="orientation|keyboardHidden|screenSize" />
+            android:configChanges="orientation|keyboardHidden|screenSize"/>
 
         <service android:name=".services.CandyBarWallpapersService" />
+
+        <service android:name=".services.CandyBarService"
+            android:stopWithTask="false"/>
     </application>
 
 </manifest>

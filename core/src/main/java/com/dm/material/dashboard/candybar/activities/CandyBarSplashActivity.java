@@ -1,22 +1,36 @@
 package com.dm.material.dashboard.candybar.activities;
 
+import android.app.Activity;
 import android.content.Context;
 import android.content.Intent;
-import android.content.pm.PackageManager;
-import android.content.pm.ResolveInfo;
 import android.os.AsyncTask;
 import android.os.Bundle;
+import android.support.annotation.NonNull;
+import android.support.annotation.Nullable;
 import android.support.v4.content.ContextCompat;
 import android.support.v7.app.AppCompatActivity;
 import android.util.Log;
+import android.util.TypedValue;
 import android.widget.TextView;
 
+import com.danimahardhika.android.helpers.core.ColorHelper;
 import com.dm.material.dashboard.candybar.R;
-import com.dm.material.dashboard.candybar.helpers.ColorHelper;
-import com.dm.material.dashboard.candybar.items.Request;
-import com.dm.material.dashboard.candybar.utils.Tag;
+import com.dm.material.dashboard.candybar.activities.callbacks.SplashScreenCallback;
+import com.dm.material.dashboard.candybar.activities.configurations.SplashScreenConfiguration;
+import com.dm.material.dashboard.candybar.applications.CandyBarApplication;
+import com.dm.material.dashboard.candybar.databases.Database;
+import com.dm.material.dashboard.candybar.helpers.JsonHelper;
+import com.dm.material.dashboard.candybar.helpers.WallpaperHelper;
+import com.dm.material.dashboard.candybar.utils.ImageConfig;
+import com.danimahardhika.android.helpers.core.utils.LogUtil;
+import com.nostra13.universalimageloader.core.ImageLoader;
 
-import java.util.Collections;
+import java.io.InputStream;
+import java.lang.ref.WeakReference;
+import java.net.HttpURLConnection;
+import java.net.URL;
+import java.util.List;
+import java.util.Map;
 
 import uk.co.chrisjenx.calligraphy.CalligraphyContextWrapper;
 
@@ -38,22 +52,24 @@ import uk.co.chrisjenx.calligraphy.CalligraphyContextWrapper;
  * limitations under the License.
  */
 
-public class CandyBarSplashActivity extends AppCompatActivity {
+public abstract class CandyBarSplashActivity extends AppCompatActivity implements SplashScreenCallback {
 
-    private Class<?> mMainActivity;
-    private AsyncTask<Void, Request, Boolean> mPrepareIconRequest;
+    private AsyncTask mSplashScreenLoader;
+    private AsyncTask mCloudWallpapersLoader;
+    private SplashScreenConfiguration mConfig;
 
-    public void initSplashActivity(Bundle savedInstanceState, Class<?> mainActivity) {
+    @Override
+    protected void onCreate(@Nullable Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_splash);
-        mMainActivity = mainActivity;
+        mConfig = onInit();
+        initBottomText();
 
-        int titleColor = ColorHelper.getTitleTextColor(ContextCompat
-                .getColor(this, R.color.splashColor));
-        TextView splashTitle = (TextView) findViewById(R.id.splash_title);
-        splashTitle.setTextColor(ColorHelper.setColorAlpha(titleColor, 0.6f ));
+        mSplashScreenLoader = new SplashScreenLoader(this)
+                .mainActivity(mConfig.getMainActivity())
+                .executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR);
 
-        prepareIconRequest();
+        mCloudWallpapersLoader = new CloudWallpapersLoader(this).execute();
     }
 
     @Override
@@ -62,48 +78,139 @@ public class CandyBarSplashActivity extends AppCompatActivity {
     }
 
     @Override
+    public void onBackPressed() {
+        if (mCloudWallpapersLoader != null) {
+            mCloudWallpapersLoader.cancel(true);
+        }
+        Database.get(this.getApplicationContext()).closeDatabase();
+        super.onBackPressed();
+    }
+
+    @Override
     protected void onDestroy() {
-        if (mPrepareIconRequest != null) mPrepareIconRequest.cancel(true);
+        if (mSplashScreenLoader != null) {
+            mSplashScreenLoader.cancel(true);
+        }
         super.onDestroy();
     }
 
-    private void prepareIconRequest() {
-        mPrepareIconRequest = new AsyncTask<Void, Request, Boolean>() {
+    private void initBottomText() {
+        TextView splashTitle = findViewById(R.id.splash_title);
+        if (splashTitle != null) {
+            splashTitle.setText(mConfig.getBottomText());
 
-            @Override
-            protected Boolean doInBackground(Void... voids) {
-                while (!isCancelled()) {
-                    try {
-                        PackageManager packageManager = getPackageManager();
-
-                        Intent intent = new Intent(Intent.ACTION_MAIN);
-                        intent.addCategory(Intent.CATEGORY_LAUNCHER);
-                        CandyBarMainActivity.sInstalledApps = packageManager.queryIntentActivities(
-                                intent, PackageManager.GET_RESOLVED_FILTER);
-
-                        try {
-                            Collections.sort(CandyBarMainActivity.sInstalledApps,
-                                    new ResolveInfo.DisplayNameComparator(getPackageManager()));
-                        } catch (Exception ignored) {}
-                        return true;
-                    } catch (Exception e) {
-                        Log.d(Tag.LOG_TAG, Log.getStackTraceString(e));
-                        return false;
-                    }
-                }
-                return false;
+            if (mConfig.getBottomTextColor() != -1) {
+                splashTitle.setTextColor(mConfig.getBottomTextColor());
+            } else {
+                int color = ContextCompat.getColor(this, R.color.splashColor);
+                splashTitle.setTextColor(ColorHelper.getBodyTextColor(color));
             }
 
-            @Override
-            protected void onPostExecute(Boolean aBoolean) {
-                super.onPostExecute(aBoolean);
-                mPrepareIconRequest = null;
-                startActivity(new Intent(CandyBarSplashActivity.this, mMainActivity));
-                overridePendingTransition(android.R.anim.fade_in, android.R.anim.fade_out);
-                finish();
-            }
-        }.execute();
+            splashTitle.setTextSize(TypedValue.COMPLEX_UNIT_SP, mConfig.getBottomTextSize());
+            splashTitle.setTypeface(mConfig.getBottomTextFont(this));
+        }
     }
 
+    private static class SplashScreenLoader extends AsyncTask<Void, Void, Boolean> {
+
+        private WeakReference<Context> context;
+        private Class<?> mainActivity;
+
+        private SplashScreenLoader(@NonNull Context context) {
+            this.context = new WeakReference<>(context);
+        }
+
+        private SplashScreenLoader mainActivity(@NonNull Class<?> mainActivity) {
+            this.mainActivity = mainActivity;
+            return this;
+        }
+
+        @Override
+        protected Boolean doInBackground(Void... voids) {
+            while (!isCancelled()) {
+                try {
+                    Thread.sleep(400);
+                    return true;
+                } catch (Exception e) {
+                    LogUtil.e(Log.getStackTraceString(e));
+                    return false;
+                }
+            }
+            return false;
+        }
+
+        @Override
+        protected void onPostExecute(Boolean aBoolean) {
+            super.onPostExecute(aBoolean);
+            if (context.get() == null) return;
+            if (context.get() instanceof Activity) {
+                if (((Activity) context.get()).isFinishing()) return;
+            }
+
+            Intent intent = new Intent(context.get(), mainActivity);
+            intent.setFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP);
+            intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP);
+
+            Activity activity = (Activity) context.get();
+            activity.startActivity(intent);
+            activity.overridePendingTransition(android.R.anim.fade_in, android.R.anim.fade_out);
+            activity.finish();
+        }
+    }
+
+    private static class CloudWallpapersLoader extends AsyncTask<Void, Void, Boolean> {
+
+        private WeakReference<Context> context;
+
+        private CloudWallpapersLoader(@NonNull Context context) {
+            this.context = new WeakReference<>(context);
+        }
+
+        @Override
+        protected Boolean doInBackground(Void... voids) {
+            while (!isCancelled()) {
+                try {
+                    Thread.sleep(1);
+                    if (WallpaperHelper.getWallpaperType(context.get()) != WallpaperHelper.CLOUD_WALLPAPERS)
+                        return true;
+
+                    if (Database.get(context.get().getApplicationContext()).getWallpapersCount() > 0)
+                        return true;
+
+                    URL url = new URL(context.get().getString(R.string.wallpaper_json));
+                    HttpURLConnection connection = (HttpURLConnection) url.openConnection();
+                    connection.setConnectTimeout(15000);
+                    if (connection.getResponseCode() == HttpURLConnection.HTTP_OK) {
+                        InputStream stream = connection.getInputStream();
+                        List list = JsonHelper.parseList(stream);
+                        if (list == null) {
+                            LogUtil.e("Json error, no array with name: "
+                                    + CandyBarApplication.getConfiguration().getWallpaperJsonStructure().getArrayName());
+                            return false;
+                        }
+
+                        if (Database.get(context.get().getApplicationContext()).getWallpapersCount() > 0) {
+                            Database.get(context.get().getApplicationContext()).deleteWallpapers();
+                        }
+
+                        Database.get(context.get().getApplicationContext()).addWallpapers(list);
+
+                        if (list.size() > 0 && list.get(0) instanceof Map) {
+                            Map map = (Map) list.get(0);
+                            String thumbUrl = JsonHelper.getThumbUrl(map);
+                            ImageLoader.getInstance().loadImageSync(thumbUrl,
+                                    ImageConfig.getThumbnailSize(),
+                                    ImageConfig.getDefaultImageOptions(true));
+                        }
+                    }
+                    return true;
+                } catch (Exception e) {
+                    LogUtil.e(Log.getStackTraceString(e));
+                    return false;
+                }
+            }
+            return false;
+        }
+    }
 }
 

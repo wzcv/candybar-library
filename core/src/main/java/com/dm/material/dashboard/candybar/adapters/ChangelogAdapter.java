@@ -6,9 +6,9 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.widget.BaseAdapter;
 
+import com.danimahardhika.android.helpers.core.ColorHelper;
+import com.danimahardhika.android.helpers.core.DrawableHelper;
 import com.dm.material.dashboard.candybar.R;
-import com.dm.material.dashboard.candybar.helpers.ColorHelper;
-import com.dm.material.dashboard.candybar.helpers.DrawableHelper;
 
 import org.sufficientlysecure.htmltextview.HtmlTextView;
 
@@ -72,17 +72,15 @@ public class ChangelogAdapter extends BaseAdapter {
 
     private class ViewHolder {
 
-        final HtmlTextView changelog;
+        private final HtmlTextView changelog;
 
         ViewHolder(View view) {
-            changelog = (HtmlTextView) view.findViewById(R.id.changelog);
+            changelog = view.findViewById(R.id.changelog);
             int color = ColorHelper.getAttributeColor(mContext,
-                    android.R.attr.textColorSecondary);
+                    R.attr.colorAccent);
             changelog.setCompoundDrawablesWithIntrinsicBounds(
                     DrawableHelper.getTintedDrawable(mContext, R.drawable.ic_changelog_dot, color),
                     null, null, null);
         }
-
     }
-
 }

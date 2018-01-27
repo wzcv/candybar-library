@@ -1,82 +1,57 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout
     xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
     tools:ignore="MissingPrefix"
+    android:id="@+id/container"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:orientation="vertical"
-    android:gravity="center_vertical">
+    android:padding="@dimen/content_margin"
+    android:gravity="center_vertical"
+    android:orientation="horizontal"
+    android:background="?attr/selectableItemBackground"
+    android:theme="@style/RippleStyle">
 
-    <com.balysv.materialripple.MaterialRippleLayout
+    <me.zhanghai.android.materialprogressbar.MaterialProgressBar
+        android:id="@+id/progress"
+        android:layout_width="@dimen/icon_size_medium"
+        android:layout_height="@dimen/icon_size_medium"
+        android:indeterminate="true"
+        android:visibility="gone"
+        style="@style/Widget.MaterialProgressBar.ProgressBar"/>
+
+    <ImageView
+        android:id="@+id/icon"
+        android:layout_width="@dimen/icon_size_medium"
+        android:layout_height="@dimen/icon_size_medium"
+        android:layout_gravity="center_vertical" />
+
+    <LinearLayout
         android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        app:mrl_rippleAlpha="0.15"
-        app:mrl_rippleColor="?attr/card_ripple"
-        app:mrl_rippleDelayClick="true"
-        app:mrl_rippleOverlay="true"
-        app:mrl_rippleDuration="500"
-        app:mrl_rippleDimension="4dp" >
+        android:layout_height="wrap_content"
+        android:layout_marginLeft="@dimen/content_margin"
+        android:layout_marginStart="@dimen/content_margin"
+        android:orientation="vertical"
+        android:gravity="center_vertical">
 
-        <LinearLayout
-            android:id="@+id/container"
+        <TextView
+            android:id="@+id/name"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:padding="@dimen/intent_content_padding"
-            android:gravity="center_vertical"
-            android:orientation="horizontal">
+            android:textSize="@dimen/text_content_title"
+            android:maxLines="1"
+            android:ellipsize="end"
+            android:textColor="?android:attr/textColorPrimary"
+            fontPath="fonts/Font-Medium.ttf"/>
 
-            <ImageView
-                android:id="@+id/icon"
-                android:layout_width="34dp"
-                android:layout_height="34dp"
-                android:layout_gravity="center_vertical" />
-
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="vertical"
-                android:gravity="center_vertical">
-
-                <TextView
-                    android:id="@+id/name"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginLeft="@dimen/intent_content_padding"
-                    android:layout_marginStart="@dimen/intent_content_padding"
-                    android:textSize="@dimen/text_content_title"
-                    android:singleLine="true"
-                    android:ellipsize="end"
-                    android:textColor="?android:attr/textColorPrimary"
-                    fontPath="fonts/Font-Medium.ttf"/>
-
-                <TextView
-                    android:id="@+id/type"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:layout_marginLeft="@dimen/intent_content_padding"
-                    android:layout_marginStart="@dimen/intent_content_padding"
-                    android:textSize="@dimen/text_content"
-                    android:singleLine="true"
-                    android:ellipsize="end"
-                    android:textColor="?android:attr/textColorSecondary"
-                    fontPath="fonts/Font-Regular.ttf"/>
-
-            </LinearLayout>
-
-        </LinearLayout>
-
-    </com.balysv.materialripple.MaterialRippleLayout>
-
-    <View
-        android:id="@+id/divider"
-        android:layout_width="match_parent"
-        android:layout_height="1dp"
-        android:layout_marginLeft="@dimen/intent_content_padding"
-        android:layout_marginStart="@dimen/intent_content_padding"
-        android:layout_marginRight="@dimen/intent_content_padding"
-        android:layout_marginEnd="@dimen/intent_content_padding"
-        android:background="?attr/divider_list"/>
-
+        <TextView
+            android:id="@+id/type"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:textSize="@dimen/text_content"
+            android:maxLines="1"
+            android:ellipsize="end"
+            android:textColor="?android:attr/textColorSecondary"
+            fontPath="fonts/Font-Regular.ttf"/>
+    </LinearLayout>
 </LinearLayout>

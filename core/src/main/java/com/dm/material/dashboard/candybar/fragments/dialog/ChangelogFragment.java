@@ -1,6 +1,7 @@
 package com.dm.material.dashboard.candybar.fragments.dialog;
 
 import android.app.Dialog;
+import android.content.DialogInterface;
 import android.os.Bundle;
 import android.support.annotation.NonNull;
 import android.support.v4.app.DialogFragment;
@@ -14,6 +15,8 @@ import android.widget.TextView;
 import com.afollestad.materialdialogs.MaterialDialog;
 import com.dm.material.dashboard.candybar.R;
 import com.dm.material.dashboard.candybar.adapters.ChangelogAdapter;
+import com.dm.material.dashboard.candybar.helpers.TypefaceHelper;
+import com.dm.material.dashboard.candybar.utils.listeners.HomeListener;
 
 /*
  * CandyBar - Material Dashboard
@@ -35,6 +38,10 @@ import com.dm.material.dashboard.candybar.adapters.ChangelogAdapter;
 
 public class ChangelogFragment extends DialogFragment{
 
+    private ListView mChangelogList;
+    private TextView mChangelogDate;
+    private TextView mChangelogVersion;
+
     private static final String TAG = "candybar.dialog.changelog";
 
     private static ChangelogFragment newInstance() {
@@ -47,20 +54,20 @@ public class ChangelogFragment extends DialogFragment{
         if (prev != null) {
             ft.remove(prev);
         }
-        ft.addToBackStack(null);
 
-        DialogFragment dialog = ChangelogFragment.newInstance();
-        dialog.show(ft, TAG);
+        try {
+            DialogFragment dialog = ChangelogFragment.newInstance();
+            dialog.show(ft, TAG);
+        } catch (IllegalArgumentException | IllegalStateException ignored) {}
     }
-
-    private ListView mChangelogList;
-    private TextView mChangelogDate;
-    private TextView mChangelogVersion;
 
     @NonNull
     @Override
     public Dialog onCreateDialog(Bundle savedInstanceState) {
         MaterialDialog.Builder builder = new MaterialDialog.Builder(getActivity());
+        builder.typeface(
+                TypefaceHelper.getMedium(getActivity()),
+                TypefaceHelper.getRegular(getActivity()));
         builder.customView(R.layout.fragment_changelog, false);
         builder.positiveText(R.string.close);
         MaterialDialog dialog = builder.build();
@@ -92,4 +99,17 @@ public class ChangelogFragment extends DialogFragment{
         mChangelogList.setAdapter(new ChangelogAdapter(getActivity(), changelog));
     }
 
+    @Override
+    public void onDismiss(DialogInterface dialog) {
+        super.onDismiss(dialog);
+
+        FragmentManager fm = getActivity().getSupportFragmentManager();
+        if (fm != null) {
+            Fragment fragment = fm.findFragmentByTag("home");
+            if (fragment != null) {
+                HomeListener listener = (HomeListener) fragment;
+                listener.onHomeIntroInit();
+            }
+        }
+    }
 }

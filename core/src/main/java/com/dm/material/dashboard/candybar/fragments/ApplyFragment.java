@@ -6,28 +6,24 @@ import android.content.res.Configuration;
 import android.content.res.TypedArray;
 import android.os.AsyncTask;
 import android.os.Bundle;
+import android.support.annotation.NonNull;
 import android.support.annotation.Nullable;
 import android.support.v4.app.Fragment;
-import android.support.v4.view.ViewCompat;
-import android.support.v4.widget.NestedScrollView;
-import android.support.v7.widget.AppCompatButton;
 import android.support.v7.widget.DefaultItemAnimator;
+import android.support.v7.widget.GridLayoutManager;
+import android.support.v7.widget.RecyclerView;
 import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
-import android.widget.LinearLayout;
-import android.widget.TextView;
 
 import com.dm.material.dashboard.candybar.R;
 import com.dm.material.dashboard.candybar.adapters.LauncherAdapter;
-import com.dm.material.dashboard.candybar.helpers.ColorHelper;
-import com.dm.material.dashboard.candybar.helpers.ViewHelper;
+import com.dm.material.dashboard.candybar.applications.CandyBarApplication;
 import com.dm.material.dashboard.candybar.items.Icon;
 import com.dm.material.dashboard.candybar.preferences.Preferences;
 import com.dm.material.dashboard.candybar.utils.AlphanumComparator;
-import com.dm.material.dashboard.candybar.utils.Tag;
-import com.dm.material.dashboard.candybar.utils.views.AutoFitRecyclerView;
+import com.danimahardhika.android.helpers.core.utils.LogUtil;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -51,29 +47,21 @@ import java.util.List;
  * limitations under the License.
  */
 
-public class ApplyFragment extends Fragment implements View.OnClickListener {
+public class ApplyFragment extends Fragment{
 
-    private TextView mNoLauncher;
-    private AutoFitRecyclerView mInstalledGrid;
-    private AutoFitRecyclerView mSupportedGrid;
-    private NestedScrollView mScrollView;
-
-    private AsyncTask<Void, Void, Boolean> mGetLaunchers;
+    private RecyclerView mRecyclerView;
+    private AsyncTask mAsyncTask;
 
     @Nullable
     @Override
-    public View onCreateView(LayoutInflater inflater, @Nullable ViewGroup container,
+    public View onCreateView(@NonNull LayoutInflater inflater, @Nullable ViewGroup container,
                              @Nullable Bundle savedInstanceState) {
         View view = inflater.inflate(R.layout.fragment_apply, container, false);
-        mScrollView = (NestedScrollView) view.findViewById(R.id.scrollview);
-        mNoLauncher = (TextView) view.findViewById(R.id.no_launcher);
-        mInstalledGrid = (AutoFitRecyclerView) view.findViewById(R.id.installed_grid);
-        mSupportedGrid = (AutoFitRecyclerView) view.findViewById(R.id.supported_grid);
+        mRecyclerView = view.findViewById(R.id.recyclerview);
 
-        if (Preferences.getPreferences(getActivity()).isShowApplyTips()) {
-            LinearLayout applyTips = (LinearLayout) view.findViewById(
-                    R.id.apply_tips_bar);
-            applyTips.setVisibility(View.VISIBLE);
+        if (!Preferences.get(getActivity()).isToolbarShadowEnabled()) {
+            View shadow = view.findViewById(R.id.shadow);
+            if (shadow != null) shadow.setVisibility(View.GONE);
         }
         return view;
     }
@@ -81,162 +69,50 @@ public class ApplyFragment extends Fragment implements View.OnClickListener {
     @Override
     public void onActivityCreated(@Nullable Bundle savedInstanceState) {
         super.onActivityCreated(savedInstanceState);
-        ViewCompat.setNestedScrollingEnabled(mScrollView, false);
-        ViewHelper.resetNavigationBarBottomMargin(getActivity(), mScrollView,
-                getActivity().getResources().getConfiguration().orientation);
 
-        mInstalledGrid.setHasFixedSize(false);
-        mInstalledGrid.setNestedScrollingEnabled(false);
-        mInstalledGrid.setItemAnimator(new DefaultItemAnimator());
-        mInstalledGrid.getLayoutManager().setAutoMeasureEnabled(true);
+        mRecyclerView.setItemAnimator(new DefaultItemAnimator());
+        mRecyclerView.setLayoutManager(new GridLayoutManager(getActivity(),
+                getActivity().getResources().getInteger(R.integer.apply_column_count)));
 
-        mSupportedGrid.setHasFixedSize(false);
-        mSupportedGrid.setNestedScrollingEnabled(false);
-        mSupportedGrid.setItemAnimator(new DefaultItemAnimator());
-        mSupportedGrid.getLayoutManager().setAutoMeasureEnabled(true);
+        if (CandyBarApplication.getConfiguration().getApplyGrid() == CandyBarApplication.GridStyle.FLAT) {
+            int padding = getActivity().getResources().getDimensionPixelSize(R.dimen.card_margin);
+            mRecyclerView.setPadding(padding, padding, 0, 0);
+        }
 
-        initApplyTips();
-        getLaunchers();
+        mAsyncTask = new LaunchersLoader().executeOnExecutor(AsyncTask.THREAD_POOL_EXECUTOR);
     }
 
     @Override
     public void onConfigurationChanged(Configuration newConfig) {
         super.onConfigurationChanged(newConfig);
-        ViewHelper.resetNavigationBarBottomMargin(getActivity(), mScrollView, newConfig.orientation);
+        resetSpanSizeLookUp();
     }
 
     @Override
     public void onDestroy() {
-        if (mGetLaunchers != null) mGetLaunchers.cancel(true);
+        if (mAsyncTask != null) {
+            mAsyncTask.cancel(true);
+        }
         super.onDestroy();
     }
 
-    @Override
-    public void onClick(View view) {
-        int id = view.getId();
-        if (id == R.id.apply_tips_dismiss) {
-            LinearLayout applyTips = (LinearLayout) getActivity()
-                    .findViewById(R.id.apply_tips_bar);
-            applyTips.setVisibility(View.GONE);
-            Preferences.getPreferences(getActivity()).showApplyTips(false);
-        }
-    }
+    private void resetSpanSizeLookUp() {
+        int column = getActivity().getResources().getInteger(R.integer.apply_column_count);
+        LauncherAdapter adapter = (LauncherAdapter) mRecyclerView.getAdapter();
+        GridLayoutManager manager = (GridLayoutManager) mRecyclerView.getLayoutManager();
 
-    private void initApplyTips() {
-        if (!Preferences.getPreferences(getActivity()).isShowApplyTips()) return;
+        try {
+            manager.setSpanCount(column);
 
-        int toolbarIcon = ColorHelper.getAttributeColor(getActivity(), R.attr.toolbar_icon);
-        TextView desc = (TextView) getActivity().findViewById(R.id.apply_tips_desc);
-        desc.setTextColor(ColorHelper.setColorAlpha(toolbarIcon, 0.6f));
-    }
-    private void initApplyTipsFab() {
-        if (!Preferences.getPreferences(getActivity()).isShowApplyTips()) return;
-
-        int accent = ColorHelper.getAttributeColor(getActivity(), R.attr.colorAccent);
-        int textColor = ColorHelper.getTitleTextColor(accent);
-        AppCompatButton dismiss = (AppCompatButton) getActivity()
-                .findViewById(R.id.apply_tips_dismiss);
-        dismiss.setTextColor(textColor);
-        dismiss.setOnClickListener(this);
-    }
-
-
-    private void getLaunchers() {
-        mGetLaunchers = new AsyncTask<Void, Void, Boolean>() {
-
-            List<Icon> installed;
-            List<Icon> supported;
-
-            @Override
-            protected void onPreExecute() {
-                super.onPreExecute();
-                installed = new ArrayList<>();
-                supported = new ArrayList<>();
-            }
-
-            @Override
-            protected Boolean doInBackground(Void... voids) {
-                while (!isCancelled()) {
-                    try {
-                        Thread.sleep(1);
-                        String[] launcherNames = getActivity().getResources().getStringArray(
-                                R.array.launcher_names);
-                        TypedArray launcherIcons = getActivity().getResources().obtainTypedArray(
-                                R.array.launcher_icons);
-                        String[] launcherPackages1 = getActivity().getResources().getStringArray(
-                                R.array.launcher_packages_1);
-                        String[] launcherPackages2 = getActivity().getResources().getStringArray(
-                                R.array.launcher_packages_2);
-                        String[] launcherPackages3 = getActivity().getResources().getStringArray(
-                                R.array.launcher_packages_3);
-
-                        for (int i = 0; i < launcherNames.length; i++) {
-                            boolean isInstalled = isLauncherInstalled(
-                                    launcherPackages1[i],
-                                    launcherPackages2[i],
-                                    launcherPackages3[i]);
-
-                            int icon = R.drawable.ic_app_default;
-                            if (i < launcherIcons.length())
-                                icon = launcherIcons.getResourceId(i, icon);
-
-                            String launcherPackage = launcherPackages1[i];
-                            if (launcherPackages1[i].equals("com.lge.launcher2")) {
-                                boolean lghome3 = isPackageInstalled(launcherPackages2[i]);
-                                if (lghome3) launcherPackage = launcherPackages2[i];
-                            }
-
-                            Icon launcher = new Icon(launcherNames[i], icon, launcherPackage);
-                            if (isInstalled) installed.add(launcher);
-                            else supported.add(launcher);
-                        }
-
-                        try {
-                            Collections.sort(installed, new AlphanumComparator() {
-                                @Override
-                                public int compare(Object o1, Object o2) {
-                                    String s1 = ((Icon) o1).getTitle();
-                                    String s2 = ((Icon) o2).getTitle();
-                                    return super.compare(s1, s2);
-                                }
-                            });
-                        } catch (Exception ignored) {}
-
-                        try {
-                            Collections.sort(supported, new AlphanumComparator() {
-                                @Override
-                                public int compare(Object o1, Object o2) {
-                                    String s1 = ((Icon) o1).getTitle();
-                                    String s2 = ((Icon) o2).getTitle();
-                                    return super.compare(s1, s2);
-                                }
-                            });
-                        } catch (Exception ignored) {}
-
-                        launcherIcons.recycle();
-                        return true;
-                    } catch (Exception e) {
-                        Log.d(Tag.LOG_TAG, Log.getStackTraceString(e));
-                        return false;
-                    }
+            manager.setSpanSizeLookup(new GridLayoutManager.SpanSizeLookup() {
+                @Override
+                public int getSpanSize(int position) {
+                    if (position == adapter.getFirstHeaderPosition() || position == adapter.getLastHeaderPosition())
+                        return column;
+                    return 1;
                 }
-                return false;
-            }
-
-            @Override
-            protected void onPostExecute(Boolean aBoolean) {
-                super.onPostExecute(aBoolean);
-                initApplyTipsFab();
-                if (aBoolean) {
-                    if (installed.size() > 0)
-                        mInstalledGrid.setAdapter(new LauncherAdapter(getActivity(), installed));
-                    else mNoLauncher.setVisibility(View.VISIBLE);
-
-                   mSupportedGrid.setAdapter(new LauncherAdapter(getActivity(), supported));
-                }
-                mGetLaunchers = null;
-            }
-        }.execute();
+            });
+        } catch (Exception ignored) {}
     }
 
     private boolean isPackageInstalled(String pkg) {
@@ -253,4 +129,123 @@ public class ApplyFragment extends Fragment implements View.OnClickListener {
         return isPackageInstalled(pkg1) | isPackageInstalled(pkg2) | isPackageInstalled(pkg3);
     }
 
+    private boolean isLauncherShouldBeAdded(String packageName) {
+        if (("com.dlto.atom.launcher").equals(packageName)) {
+            int id = getResources().getIdentifier("appmap", "xml", getActivity().getPackageName());
+            if (id <= 0) return false;
+        } else if (("com.lge.launcher2").equals(packageName) ||
+                ("com.lge.launcher3").equals(packageName)) {
+            int id = getResources().getIdentifier("theme_resources", "xml", getActivity().getPackageName());
+            if (id <= 0) return false;
+        }
+        return true;
+    }
+
+    private class LaunchersLoader extends AsyncTask<Void, Void, Boolean> {
+
+        private List<Icon> launchers;
+
+        @Override
+        protected void onPreExecute() {
+            super.onPreExecute();
+            launchers = new ArrayList<>();
+        }
+
+        @Override
+        protected Boolean doInBackground(Void... voids) {
+            while (!isCancelled()) {
+                try {
+                    Thread.sleep(1);
+                    String[] launcherNames = getResources().getStringArray(
+                            R.array.launcher_names);
+                    TypedArray launcherIcons = getResources().obtainTypedArray(
+                            R.array.launcher_icons);
+                    String[] launcherPackages1 = getResources().getStringArray(
+                            R.array.launcher_packages_1);
+                    String[] launcherPackages2 = getResources().getStringArray(
+                            R.array.launcher_packages_2);
+                    String[] launcherPackages3 = getResources().getStringArray(
+                            R.array.launcher_packages_3);
+
+                    List<Icon> installed = new ArrayList<>();
+                    List<Icon> supported = new ArrayList<>();
+
+                    for (int i = 0; i < launcherNames.length; i++) {
+                        boolean isInstalled = isLauncherInstalled(
+                                launcherPackages1[i],
+                                launcherPackages2[i],
+                                launcherPackages3[i]);
+
+                        int icon = R.drawable.ic_app_default;
+                        if (i < launcherIcons.length())
+                            icon = launcherIcons.getResourceId(i, icon);
+
+                        String launcherPackage = launcherPackages1[i];
+                        if (launcherPackages1[i].equals("com.lge.launcher2")) {
+                            boolean lghome3 = isPackageInstalled(launcherPackages2[i]);
+                            if (lghome3) launcherPackage = launcherPackages2[i];
+                        }
+
+                        Icon launcher = new Icon(launcherNames[i], icon, launcherPackage);
+                        if (isLauncherShouldBeAdded(launcherPackage)) {
+                            if (isInstalled) installed.add(launcher);
+                            else supported.add(launcher);
+                        }
+                    }
+
+                    try {
+                        Collections.sort(installed, new AlphanumComparator() {
+                            @Override
+                            public int compare(Object o1, Object o2) {
+                                String s1 = ((Icon) o1).getTitle();
+                                String s2 = ((Icon) o2).getTitle();
+                                return super.compare(s1, s2);
+                            }
+                        });
+                    } catch (Exception ignored) {}
+
+                    try {
+                        Collections.sort(supported, new AlphanumComparator() {
+                            @Override
+                            public int compare(Object o1, Object o2) {
+                                String s1 = ((Icon) o1).getTitle();
+                                String s2 = ((Icon) o2).getTitle();
+                                return super.compare(s1, s2);
+                            }
+                        });
+                    } catch (Exception ignored) {}
+
+                    if (installed.size() > 0) {
+                        launchers.add(new Icon(getResources().getString(
+                                R.string.apply_installed), -1, null));
+                    }
+
+                    launchers.addAll(installed);
+                    launchers.add(new Icon(getResources().getString(
+                            R.string.apply_supported), -2, null));
+                    launchers.addAll(supported);
+
+                    launcherIcons.recycle();
+                    return true;
+                } catch (Exception e) {
+                    LogUtil.e(Log.getStackTraceString(e));
+                    return false;
+                }
+            }
+            return false;
+        }
+
+        @Override
+        protected void onPostExecute(Boolean aBoolean) {
+            super.onPostExecute(aBoolean);
+            if (getActivity() == null) return;
+            if (getActivity().isFinishing()) return;
+
+            mAsyncTask = null;
+            if (aBoolean) {
+                mRecyclerView.setAdapter(new LauncherAdapter(getActivity(), launchers));
+                resetSpanSizeLookUp();
+            }
+        }
+    }
 }

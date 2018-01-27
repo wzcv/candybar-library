@@ -20,12 +20,11 @@
             android:layout_height="match_parent"
             android:gravity="center_vertical"
             android:text="@string/muzei_settings"
-            android:singleLine="true"
+            android:maxLines="1"
             android:ellipsize="end"
             android:textSize="@dimen/text_toolbar_title"
             android:textColor="?attr/toolbar_icon"
             fontPath="fonts/Font-Medium.ttf"/>
-
     </android.support.v7.widget.Toolbar>
 
     <ScrollView
@@ -46,9 +45,9 @@
                 android:layout_height="wrap_content"
                 android:text="@string/muzei_refresh_duration"
                 android:textSize="@dimen/text_toolbar_title"
-                android:textColor="?attr/colorAccent"
+                android:textColor="?android:attr/textColorPrimary"
                 android:gravity="center"
-                fontPath="fonts/Font-Bold.ttf"/>
+                fontPath="fonts/Font-Medium.ttf"/>
 
             <LinearLayout
                 android:layout_width="wrap_content"
@@ -83,7 +82,6 @@
                     android:textSize="@dimen/text_content_subtitle"
                     app:theme="@style/CheckBoxStyle"
                     fontPath="fonts/Font-Regular.ttf"/>
-
             </LinearLayout>
 
             <android.support.v7.widget.AppCompatCheckBox
@@ -97,21 +95,7 @@
                 android:textSize="@dimen/text_content_subtitle"
                 app:theme="@style/CheckBoxStyle"
                 fontPath="fonts/Font-Regular.ttf"/>
-
-            <android.support.v7.widget.AppCompatCheckBox
-                android:id="@+id/downloaded_only"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginTop="2dp"
-                android:text="@string/muzei_downloaded_only"
-                android:background="@android:color/transparent"
-                android:textColor="?android:attr/textColorPrimary"
-                android:textSize="@dimen/text_content_subtitle"
-                app:theme="@style/CheckBoxStyle"
-                fontPath="fonts/Font-Regular.ttf"/>
-
         </LinearLayout>
-
     </ScrollView>
 
     <View
@@ -119,5 +103,4 @@
         android:layout_height="@dimen/toolbar_shadow"
         android:layout_below="@+id/toolbar"
         android:background="@drawable/toolbar_shadow" />
-
 </RelativeLayout>

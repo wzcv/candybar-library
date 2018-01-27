@@ -3,17 +3,19 @@ package com.dm.material.dashboard.candybar.services;
 import android.app.IntentService;
 import android.content.Intent;
 import android.util.Log;
-import android.webkit.URLUtil;
 
-import com.bluelinelabs.logansquare.LoganSquare;
 import com.dm.material.dashboard.candybar.R;
-import com.dm.material.dashboard.candybar.items.WallpaperJSON;
+import com.dm.material.dashboard.candybar.helpers.JsonHelper;
+import com.dm.material.dashboard.candybar.helpers.WallpaperHelper;
+import com.dm.material.dashboard.candybar.items.Wallpaper;
 import com.dm.material.dashboard.candybar.receivers.CandyBarBroadcastReceiver;
-import com.dm.material.dashboard.candybar.utils.Tag;
+import com.danimahardhika.android.helpers.core.utils.LogUtil;
 
 import java.io.InputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.util.ArrayList;
+import java.util.List;
 
 /*
  * CandyBar - Material Dashboard
@@ -44,10 +46,10 @@ public class CandyBarWallpapersService extends IntentService {
     @Override
     protected void onHandleIntent(Intent intent) {
         try {
-            Thread.sleep(1);
-            String wallpaperUrl = getResources().getString(R.string.wallpaper_json);
-            if (!URLUtil.isValidUrl(wallpaperUrl)) return;
+            if (WallpaperHelper.getWallpaperType(this) != WallpaperHelper.CLOUD_WALLPAPERS)
+                return;
 
+            String wallpaperUrl = getResources().getString(R.string.wallpaper_json);
             URL url = new URL(wallpaperUrl);
             HttpURLConnection connection = (HttpURLConnection) url.openConnection();
             connection.setConnectTimeout(15000);
@@ -56,17 +58,32 @@ public class CandyBarWallpapersService extends IntentService {
             broadcastIntent.setAction(CandyBarBroadcastReceiver.PROCESS_RESPONSE);
             broadcastIntent.addCategory(Intent.CATEGORY_DEFAULT);
 
+            LogUtil.d("Wallpaper service started from: " +getPackageName());
+
             if (connection.getResponseCode() == HttpURLConnection.HTTP_OK) {
                 InputStream stream = connection.getInputStream();
-                WallpaperJSON wallpapersJSON = LoganSquare.parse(stream, WallpaperJSON.class);
-                if (wallpapersJSON == null) return;
+                List list = JsonHelper.parseList(stream);
+                if (list == null) return;
 
-                int size = wallpapersJSON.getWalls.size();
+                List<Wallpaper> wallpapers = new ArrayList<>();
+                for (int i = 0; i < list.size(); i++) {
+                    Wallpaper wallpaper = JsonHelper.getWallpaper(list.get(i));
+                    if (wallpaper != null) {
+                        if (!wallpapers.contains(wallpaper)) {
+                            wallpapers.add(wallpaper);
+                        } else {
+                            LogUtil.e("Duplicate wallpaper found: " +wallpaper.getURL());
+                        }
+                    }
+                }
+
+                int size = wallpapers.size();
                 broadcastIntent.putExtra("size", size);
+                broadcastIntent.putExtra("packageName", getPackageName());
                 sendBroadcast(broadcastIntent);
             }
         } catch (Exception e) {
-            Log.d(Tag.LOG_TAG, Log.getStackTraceString(e));
+            LogUtil.e(Log.getStackTraceString(e));
         }
     }
 }

@@ -4,36 +4,31 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
-import android.content.res.AssetManager;
-import android.net.Uri;
 import android.os.AsyncTask;
 import android.support.annotation.NonNull;
 import android.support.annotation.Nullable;
-import android.support.v4.util.SparseArrayCompat;
+import android.support.design.widget.TextInputLayout;
 import android.util.Log;
-import android.widget.Toast;
+import android.widget.EditText;
 
+import com.afollestad.materialdialogs.DialogAction;
 import com.afollestad.materialdialogs.MaterialDialog;
 import com.dm.material.dashboard.candybar.R;
-import com.dm.material.dashboard.candybar.preferences.Preferences;
-import com.dm.material.dashboard.candybar.utils.Tag;
-
-import org.w3c.dom.Document;
-import org.w3c.dom.Element;
-import org.w3c.dom.Node;
-import org.w3c.dom.NodeList;
+import com.dm.material.dashboard.candybar.applications.CandyBarApplication;
+import com.dm.material.dashboard.candybar.items.Icon;
+import com.dm.material.dashboard.candybar.tasks.ReportBugsTask;
+import com.danimahardhika.android.helpers.core.utils.LogUtil;
 
 import java.io.BufferedWriter;
 import java.io.File;
 import java.io.FileOutputStream;
-import java.io.InputStream;
 import java.io.OutputStreamWriter;
 import java.io.Writer;
+import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
-
-import javax.xml.parsers.DocumentBuilder;
-import javax.xml.parsers.DocumentBuilderFactory;
+import java.util.Map;
 
 /*
  * CandyBar - Material Dashboard
@@ -55,153 +50,136 @@ import javax.xml.parsers.DocumentBuilderFactory;
 
 public class ReportBugsHelper {
 
-    public static void checkForBugs(@NonNull Context context) {
-        new AsyncTask<Void, Void, Boolean>() {
+    public static final String REPORT_BUGS = "reportbugs.zip";
+    private static final String BROKEN_APPFILTER = "broken_appfilter.xml";
+    private static final String BROKEN_DRAWABLES = "broken_drawables.xml";
+    private static final String ACTIVITY_LIST = "activity_list.xml";
+    private static final String CRASHLOG = "crashlog.txt";
 
-            MaterialDialog dialog;
-            StringBuilder sb;
-            File folder;
-            String file;
+    public static void prepareReportBugs(@NonNull Context context) {
+        MaterialDialog.Builder builder = new MaterialDialog.Builder(context);
+        builder.customView(R.layout.dialog_report_bugs, true);
+        builder.typeface(
+                TypefaceHelper.getMedium(context),
+                TypefaceHelper.getRegular(context));
+        builder.positiveText(R.string.report_bugs_send);
+        builder.negativeText(R.string.close);
 
-            @Override
-            protected void onPreExecute() {
-                super.onPreExecute();
-                sb = new StringBuilder();
-                folder = context.getCacheDir();
-                file = folder.toString() + "/" + "reportbugs.zip";
+        MaterialDialog dialog = builder.build();
 
-                MaterialDialog.Builder builder = new MaterialDialog.Builder(context);
-                builder.content(R.string.report_bugs_building)
-                        .progress(true, 0)
-                        .progressIndeterminateStyle(true);
+        EditText editText = (EditText) dialog.findViewById(R.id.input_desc);
+        TextInputLayout inputLayout = (TextInputLayout) dialog.findViewById(R.id.input_layout);
 
-                dialog = builder.build();
-                dialog.show();
-            }
-
-            @Override
-            protected Boolean doInBackground(Void... voids) {
-                while (!isCancelled()) {
-                    try {
-                        Thread.sleep(1);
-                        SparseArrayCompat<String> files = new SparseArrayCompat<>();
-                        sb.append(DeviceHelper.getDeviceInfo(context));
-
-                        String brokenAppFilter = buildBrokenAppFilter(context, folder);
-                        if (brokenAppFilter != null) files.append(files.size(), brokenAppFilter);
-
-                        String activityList = buildActivityList(context, folder);
-                        if (activityList != null) files.append(files.size(), activityList);
-
-                        String stackTrace = Preferences.getPreferences(context).getLatestCrashLog();
-                        String crashLog = buildCrashLog(context, folder, stackTrace);
-                        if (crashLog != null) files.append(files.size(), crashLog);
-
-                        FileHelper.createZip(files, file);
-                        return true;
-                    } catch (Exception e) {
-                        Log.d(Tag.LOG_TAG, Log.getStackTraceString(e));
-                        return false;
-                    }
-                }
-                return false;
-            }
-
-            @Override
-            protected void onPostExecute(Boolean aBoolean) {
-                super.onPostExecute(aBoolean);
+        dialog.getActionButton(DialogAction.POSITIVE).setOnClickListener(view -> {
+            if (editText.getText().length() > 0) {
+                inputLayout.setErrorEnabled(false);
+                ReportBugsTask.start(context, editText.getText().toString(), AsyncTask.THREAD_POOL_EXECUTOR);
                 dialog.dismiss();
-                if (aBoolean) {
-                    File zip = new File(file);
-
-                    final Intent intent = new Intent(Intent.ACTION_SEND);
-                    intent.setType("message/rfc822");
-                    intent.putExtra(Intent.EXTRA_EMAIL,
-                            new String[]{context.getResources().getString(R.string.dev_email)});
-                    intent.putExtra(Intent.EXTRA_SUBJECT,
-                            "Report Bugs " + (context.getString(
-                                    R.string.app_name)));
-                    intent.putExtra(Intent.EXTRA_TEXT, sb.toString());
-                    Uri uri = FileHelper.getUriFromFile(context, context.getPackageName(), zip);
-                    intent.putExtra(Intent.EXTRA_STREAM, uri);
-
-                    context.startActivity(Intent.createChooser(intent,
-                            context.getResources().getString(R.string.email_client)));
-
-                } else {
-                    Toast.makeText(context, R.string.report_bugs_failed,
-                            Toast.LENGTH_LONG).show();
-                }
-
-                dialog = null;
-                sb.setLength(0);
+                return;
             }
-        }.execute();
+
+            inputLayout.setError(context.getResources().getString(R.string.report_bugs_desc_empty));
+        });
+        dialog.show();
     }
 
     @Nullable
-    private static String buildBrokenAppFilter(Context context, File folder) {
+    public static File buildBrokenAppFilter(@NonNull Context context) {
         try {
-            AssetManager asset = context.getAssets();
-            InputStream stream = asset.open("appfilter.xml");
-            DocumentBuilderFactory docFactory = DocumentBuilderFactory.newInstance();
-            DocumentBuilder docBuilder = docFactory.newDocumentBuilder();
-            Document doc = docBuilder.parse(stream);
-            NodeList list = doc.getElementsByTagName("item");
-
-            File fileDir = new File(folder.toString() + "/" + "broken_appfilter.xml");
-            Writer out = new BufferedWriter(new OutputStreamWriter(
-                    new FileOutputStream(fileDir), "UTF8"));
+            HashMap<String, String> activities = RequestHelper.getAppFilter(context, RequestHelper.Key.ACTIVITY);
+            File brokenAppFilter = new File(context.getCacheDir(), BROKEN_APPFILTER);
+            Writer writer = new BufferedWriter(new OutputStreamWriter(
+                    new FileOutputStream(brokenAppFilter), "UTF8"));
 
             boolean first = true;
-            for (int i = 0; i < list.getLength(); i++) {
-                Node nNode = list.item(i);
-                if (nNode.getNodeType() == Node.ELEMENT_NODE) {
-                    Element eElement = (Element) nNode;
+            for (Map.Entry<String, String> entry : activities.entrySet()) {
+                if (first) {
+                    first = false;
+                    writer.append("<!-- BROKEN APPFILTER -->")
+                            .append("\n").append("<!-- Broken appfilter will check for activities that included in appfilter but doesn\'t have a drawable")
+                            .append("\n").append("* ").append("The reason could because misnamed drawable or the drawable not copied to the project -->")
+                            .append("\n\n\n");
+                }
 
-                    if (first) {
-                        first = false;
-                        out.append("<!-- BROKEN APPFILTER -->");
-                        out.append("\n\n\n");
-                    }
-
-                    int drawable = context.getResources().getIdentifier(
-                            eElement.getAttribute("drawable"), "drawable", context.getPackageName());
-                    if (drawable==0) {
-                        out.append("Activity : ")
-                                .append(eElement.getAttribute("component").replace(
-                                        "ComponentInfo{", "").replace("}", ""));
-                        out.append("\n");
-                        out.append("Drawable : ").append(eElement.getAttribute("drawable"));
-                        out.append("\n");
-                        out.append("Reason : Drawable Not Found!");
-                        out.append("\n\n");
-                    }
+                int drawable = context.getResources().getIdentifier(
+                        entry.getValue(), "drawable", context.getPackageName());
+                if (drawable == 0) {
+                    writer.append("Activity: ").append(entry.getKey())
+                            .append("\n")
+                            .append("Drawable: ").append(entry.getValue()).append(".png")
+                            .append("\n\n");
                 }
             }
-            out.flush();
-            out.close();
 
-            return fileDir.toString();
-        } catch (Exception | OutOfMemoryError e) {
-            Log.d(Tag.LOG_TAG, Log.getStackTraceString(e));
+            writer.flush();
+            writer.close();
+            return brokenAppFilter;
+        } catch (Exception e) {
+            LogUtil.e(Log.getStackTraceString(e));
+            return null;
         }
-        return null;
     }
 
     @Nullable
-    private static String buildActivityList(Context context, File folder) {
+    public static File buildBrokenDrawables(@NonNull Context context) {
         try {
-            File fileDir = new File(folder.toString() + "/" + "activity_list.xml");
+            HashMap<String, String> drawables = RequestHelper.getAppFilter(context, RequestHelper.Key.DRAWABLE);
+            List<Icon> iconList = IconsHelper.getIconsList(context);
+            List<Icon> icons = new ArrayList<>();
+
+            File brokenDrawables = new File(context.getCacheDir(), BROKEN_DRAWABLES);
+            Writer writer = new BufferedWriter(new OutputStreamWriter(
+                    new FileOutputStream(brokenDrawables), "UTF8"));
+
+            for (Icon icon : iconList) {
+                if (CandyBarApplication.getConfiguration().isShowTabAllIcons()) {
+                    if (!icon.getTitle().equals(CandyBarApplication.getConfiguration().getTabAllIconsTitle())) {
+                        icons.addAll(icon.getIcons());
+                    }
+                } else {
+                    icons.addAll(icon.getIcons());
+                }
+            }
+
+            boolean first = true;
+            for (Icon icon : icons) {
+                if (first) {
+                    first = false;
+                    writer.append("<!-- BROKEN DRAWABLES -->")
+                            .append("\n").append("<!-- Broken drawables will read drawables that listed in drawable.xml")
+                            .append("\n").append("* ").append("and try to match them with drawables that used in appfilter.xml")
+                            .append("\n").append("* ").append("The reason could be drawable copied to the project but not used in appfilter.xml -->")
+                            .append("\n\n\n");
+                }
+
+                String drawable = drawables.get(icon.getTitle());
+                if (drawable == null || drawable.length() == 0) {
+                    writer.append("Drawable: ").append(icon.getTitle()).append(".png")
+                            .append("\n\n");
+                }
+            }
+
+            writer.flush();
+            writer.close();
+            return brokenDrawables;
+        } catch (Exception e) {
+            LogUtil.e(Log.getStackTraceString(e));
+            return null;
+        }
+    }
+
+    @Nullable
+    public static File buildActivityList(@NonNull Context context) {
+        try {
+            File activityList = new File(context.getCacheDir(), ACTIVITY_LIST);
             Writer out = new BufferedWriter(new OutputStreamWriter(
-                    new FileOutputStream(fileDir), "UTF8"));
+                    new FileOutputStream(activityList), "UTF8"));
 
             Intent intent = new Intent(Intent.ACTION_MAIN);
             intent.addCategory(Intent.CATEGORY_LAUNCHER);
 
             List<ResolveInfo> appList = context.getPackageManager().queryIntentActivities(
                     intent, PackageManager.GET_RESOLVED_FILTER);
-
             try {
                 Collections.sort(appList, new ResolveInfo.DisplayNameComparator(context.getPackageManager()));
             } catch (Exception ignored) {}
@@ -211,8 +189,9 @@ public class ReportBugsHelper {
 
                 if (first) {
                     first = false;
-                    out.append("<!-- ACTIVITY LIST -->");
-                    out.append("\n\n\n");
+                    out.append("<!-- ACTIVITY LIST -->")
+                            .append("\n").append("<!-- Activity list is a list that contains all activity from installed apps -->")
+                            .append("\n\n\n");
                 }
 
                 String name = app.activityInfo.loadLabel(context.getPackageManager()).toString();
@@ -221,34 +200,32 @@ public class ReportBugsHelper {
                 out.append("\n").append(activity);
                 out.append("\n\n");
             }
+
             out.flush();
             out.close();
-
-            return fileDir.toString();
-        } catch (Exception | OutOfMemoryError e) {
-            Log.d(Tag.LOG_TAG, Log.getStackTraceString(e));
+            return activityList;
+        } catch (Exception e) {
+            LogUtil.e(Log.getStackTraceString(e));
+            return null;
         }
-        return null;
     }
 
     @Nullable
-    public static String buildCrashLog(Context context, File folder, String stackTrace) {
+    public static File buildCrashLog(@NonNull Context context, @NonNull String stackTrace) {
         try {
             if (stackTrace.length() == 0) return null;
 
-            File fileDir = new File(folder.toString() + "/crashlog.txt");
+            File crashLog = new File(context.getCacheDir(), CRASHLOG);
             String deviceInfo = DeviceHelper.getDeviceInfoForCrashReport(context);
             Writer out = new BufferedWriter(new OutputStreamWriter(
-                    new FileOutputStream(fileDir), "UTF8"));
+                    new FileOutputStream(crashLog), "UTF8"));
             out.append(deviceInfo).append(stackTrace);
             out.flush();
             out.close();
-
-            return fileDir.toString();
-        } catch (Exception | OutOfMemoryError e) {
-            Log.d(Tag.LOG_TAG, Log.getStackTraceString(e));
+            return crashLog;
+        } catch (Exception e) {
+            LogUtil.e(Log.getStackTraceString(e));
+            return null;
         }
-        return null;
     }
-
 }

@@ -14,6 +14,7 @@ import android.widget.TextView;
 import com.afollestad.materialdialogs.MaterialDialog;
 import com.dm.material.dashboard.candybar.R;
 import com.dm.material.dashboard.candybar.helpers.IconsHelper;
+import com.dm.material.dashboard.candybar.helpers.TypefaceHelper;
 import com.dm.material.dashboard.candybar.utils.ImageConfig;
 import com.nostra13.universalimageloader.core.ImageLoader;
 
@@ -37,6 +38,12 @@ import com.nostra13.universalimageloader.core.ImageLoader;
 
 public class IconPreviewFragment extends DialogFragment {
 
+    private TextView mName;
+    private ImageView mIcon;
+
+    private String mIconName;
+    private int mIconId;
+
     private static final String NAME = "name";
     private static final String ID = "id";
 
@@ -57,19 +64,12 @@ public class IconPreviewFragment extends DialogFragment {
         if (prev != null) {
             ft.remove(prev);
         }
-        ft.addToBackStack(null);
 
         try {
             DialogFragment dialog = IconPreviewFragment.newInstance(name, id);
             dialog.show(ft, TAG);
         } catch (IllegalArgumentException | IllegalStateException ignored) {}
     }
-
-    private TextView mName;
-    private ImageView mIcon;
-
-    private String mIconName;
-    private int mIconId;
 
     @Override
     public void onCreate(@Nullable Bundle savedInstanceState) {
@@ -83,6 +83,9 @@ public class IconPreviewFragment extends DialogFragment {
     public Dialog onCreateDialog(Bundle savedInstanceState) {
         MaterialDialog.Builder builder = new MaterialDialog.Builder(getActivity());
         builder.customView(R.layout.fragment_icon_preview, false);
+        builder.typeface(
+                TypefaceHelper.getMedium(getActivity()),
+                TypefaceHelper.getRegular(getActivity()));
         builder.positiveText(R.string.close);
         MaterialDialog dialog = builder.build();
         dialog.show();
@@ -103,7 +106,7 @@ public class IconPreviewFragment extends DialogFragment {
         if (!getActivity().getResources().getBoolean(R.bool.show_icon_name)) {
             boolean iconNameReplacer = getActivity().getResources().getBoolean(
                     R.bool.enable_icon_name_replacer);
-            mIconName = IconsHelper.replaceIconName(getActivity(), iconNameReplacer, mIconName);
+            mIconName = IconsHelper.replaceName(getActivity(), iconNameReplacer, mIconName);
         }
 
         mName.setText(mIconName);

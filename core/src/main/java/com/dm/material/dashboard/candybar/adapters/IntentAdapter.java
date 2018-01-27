@@ -1,16 +1,14 @@
 package com.dm.material.dashboard.candybar.adapters;
 
-import android.content.ActivityNotFoundException;
 import android.content.ComponentName;
 import android.content.Context;
-import android.content.Intent;
 import android.content.pm.ActivityInfo;
-import android.net.Uri;
+import android.graphics.Color;
+import android.os.AsyncTask;
 import android.support.annotation.NonNull;
 import android.support.v4.app.DialogFragment;
 import android.support.v4.app.FragmentManager;
 import android.support.v7.app.AppCompatActivity;
-import android.util.Log;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.BaseAdapter;
@@ -19,18 +17,20 @@ import android.widget.LinearLayout;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import com.danimahardhika.android.helpers.core.ColorHelper;
 import com.dm.material.dashboard.candybar.R;
+import com.dm.material.dashboard.candybar.applications.CandyBarApplication;
 import com.dm.material.dashboard.candybar.fragments.dialog.IntentChooserFragment;
-import com.dm.material.dashboard.candybar.helpers.ColorHelper;
 import com.dm.material.dashboard.candybar.helpers.DrawableHelper;
-import com.dm.material.dashboard.candybar.helpers.FileHelper;
 import com.dm.material.dashboard.candybar.items.IntentChooser;
 import com.dm.material.dashboard.candybar.items.Request;
-import com.dm.material.dashboard.candybar.preferences.Preferences;
-import com.dm.material.dashboard.candybar.utils.Tag;
+import com.dm.material.dashboard.candybar.tasks.IconRequestBuilderTask;
+import com.dm.material.dashboard.candybar.tasks.PremiumRequestBuilderTask;
+import com.danimahardhika.android.helpers.core.utils.LogUtil;
 
-import java.io.File;
 import java.util.List;
+
+import me.zhanghai.android.materialprogressbar.MaterialProgressBar;
 
 /*
  * CandyBar - Material Dashboard
@@ -54,13 +54,13 @@ public class IntentAdapter extends BaseAdapter {
 
     private final Context mContext;
     private final List<IntentChooser> mApps;
-    private final Request mRequest;
+    private int mType;
+    private AsyncTask mAsyncTask;
 
-    public IntentAdapter(@NonNull Context context, @NonNull List<IntentChooser> apps,
-                         @NonNull Request request) {
+    public IntentAdapter(@NonNull Context context, @NonNull List<IntentChooser> apps, int type) {
         mContext = context;
         mApps = apps;
-        mRequest = request;
+        mType = type;
     }
 
     @Override
@@ -87,15 +87,10 @@ public class IntentAdapter extends BaseAdapter {
             view.setTag(holder);
         } else {
             holder = (ViewHolder) view.getTag();
-            holder.divider.setVisibility(View.VISIBLE);
         }
 
         holder.icon.setImageDrawable(DrawableHelper.getAppIcon(mContext, mApps.get(position).getApp()));
         holder.name.setText(mApps.get(position).getApp().loadLabel(mContext.getPackageManager()).toString());
-
-        if (position == mApps.size()-1) {
-            holder.divider.setVisibility(View.GONE);
-        }
 
         if (mApps.get(position).getType() == IntentChooser.TYPE_SUPPORTED) {
             holder.type.setTextColor(ColorHelper.getAttributeColor(mContext, android.R.attr.textColorSecondary));
@@ -104,7 +99,7 @@ public class IntentAdapter extends BaseAdapter {
             holder.type.setTextColor(ColorHelper.getAttributeColor(mContext, R.attr.colorAccent));
             holder.type.setText(mContext.getResources().getString(R.string.intent_email_recommended));
         } else {
-            holder.type.setTextColor(ColorHelper.getAttributeColor(mContext, R.attr.error_text));
+            holder.type.setTextColor(Color.parseColor("#F44336"));
             holder.type.setText(mContext.getResources().getString(R.string.intent_email_not_supported));
         }
 
@@ -112,16 +107,45 @@ public class IntentAdapter extends BaseAdapter {
             ActivityInfo app = mApps.get(position).getApp().activityInfo;
             if (mApps.get(position).getType() == IntentChooser.TYPE_RECOMMENDED ||
                     mApps.get(position).getType() == IntentChooser.TYPE_SUPPORTED) {
-                ComponentName name = new ComponentName(app.applicationInfo.packageName, app.name);
-                sendRequest(name);
+                if (mAsyncTask != null) return;
 
-                FragmentManager fm = ((AppCompatActivity) mContext).getSupportFragmentManager();
-                if (fm != null) {
-                    DialogFragment dialog = (DialogFragment) fm.findFragmentByTag(
-                            IntentChooserFragment.TAG);
-                    if (dialog!= null) {
-                        dialog.dismiss();
-                    }
+                holder.icon.setVisibility(View.GONE);
+                holder.progressBar.setVisibility(View.VISIBLE);
+
+                if (CandyBarApplication.sRequestProperty == null) {
+                    CandyBarApplication.sRequestProperty = new Request.Property(null, null, null);
+                }
+                CandyBarApplication.sRequestProperty.setComponentName(
+                        new ComponentName(app.applicationInfo.packageName, app.name));
+
+                if (mType == IntentChooserFragment.ICON_REQUEST) {
+                    mAsyncTask = IconRequestBuilderTask.prepare(mContext)
+                            .callback(() -> {
+                                mAsyncTask = null;
+                                FragmentManager fm = ((AppCompatActivity) mContext).getSupportFragmentManager();
+                                if (fm != null) {
+                                    DialogFragment dialog = (DialogFragment) fm.findFragmentByTag(
+                                            IntentChooserFragment.TAG);
+                                    if (dialog!= null) {
+                                        dialog.dismiss();
+                                    }
+                                }
+                            })
+                            .start(AsyncTask.THREAD_POOL_EXECUTOR);
+                } else if (mType == IntentChooserFragment.REBUILD_ICON_REQUEST) {
+                    mAsyncTask = PremiumRequestBuilderTask.start(mContext, () -> {
+                        mAsyncTask = null;
+                        FragmentManager fm = ((AppCompatActivity) mContext).getSupportFragmentManager();
+                        if (fm != null) {
+                            DialogFragment dialog = (DialogFragment) fm.findFragmentByTag(
+                                    IntentChooserFragment.TAG);
+                            if (dialog!= null) {
+                                dialog.dismiss();
+                            }
+                        }
+                    }, AsyncTask.THREAD_POOL_EXECUTOR);
+                } else {
+                    LogUtil.e("Intent chooser type unknown: " +mType);
                 }
                 return;
             }
@@ -133,62 +157,24 @@ public class IntentAdapter extends BaseAdapter {
         return view;
     }
 
+    public boolean isAsyncTaskRunning() {
+        return mAsyncTask != null;
+    }
+
     private class ViewHolder {
 
-        final TextView name;
-        final TextView type;
-        final ImageView icon;
-        final LinearLayout container;
-        final View divider;
+        private final TextView name;
+        private final TextView type;
+        private final ImageView icon;
+        private final LinearLayout container;
+        private final MaterialProgressBar progressBar;
 
         ViewHolder(View view) {
-            name = (TextView) view.findViewById(R.id.name);
-            type = (TextView) view.findViewById(R.id.type);
-            icon = (ImageView) view.findViewById(R.id.icon);
-            container = (LinearLayout) view.findViewById(R.id.container);
-            divider = view.findViewById(R.id.divider);
-            container.setBackgroundResource(Preferences.getPreferences(mContext).isDarkTheme() ?
-                    R.drawable.card_item_list_dark : R.drawable.card_item_list);
+            name = view.findViewById(R.id.name);
+            type = view.findViewById(R.id.type);
+            icon = view.findViewById(R.id.icon);
+            container = view.findViewById(R.id.container);
+            progressBar = view.findViewById(R.id.progress);
         }
     }
-
-    private void sendRequest(ComponentName name) {
-        try {
-            Intent intent = new Intent(Intent.ACTION_SEND);
-            intent = addIntentExtra(intent);
-            intent.setComponent(name);
-            intent.addCategory(Intent.CATEGORY_LAUNCHER);
-            mContext.startActivity(intent);
-        } catch (IllegalArgumentException e) {
-            try {
-                Intent intent = new Intent(Intent.ACTION_SEND);
-                intent = addIntentExtra(intent);
-                mContext.startActivity(Intent.createChooser(intent,
-                        mContext.getResources().getString(R.string.email_client)));
-            }
-            catch (ActivityNotFoundException e1) {
-                Log.d(Tag.LOG_TAG, Log.getStackTraceString(e1));
-            }
-        }
-    }
-
-    private Intent addIntentExtra(@NonNull Intent intent) {
-        intent.setType("message/rfc822");
-        if (mRequest.getStream().length() > 0) {
-            File zip = new File(mRequest.getStream());
-            Uri uri = FileHelper.getUriFromFile(mContext, mContext.getPackageName(), zip);
-            if (uri == null) uri = Uri.fromFile(zip);
-            intent.putExtra(Intent.EXTRA_STREAM, uri);
-            intent.setFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
-        }
-
-        intent.putExtra(Intent.EXTRA_EMAIL,
-                new String[]{mContext.getResources().getString(R.string.dev_email)});
-        intent.putExtra(Intent.EXTRA_SUBJECT, mRequest.getSubject());
-        intent.putExtra(Intent.EXTRA_TEXT, mRequest.getText());
-        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK |
-                Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED);
-        return intent;
-    }
-
 }

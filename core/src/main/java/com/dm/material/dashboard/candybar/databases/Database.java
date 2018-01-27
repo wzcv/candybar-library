@@ -4,17 +4,22 @@ import android.content.ContentValues;
 import android.content.Context;
 import android.database.Cursor;
 import android.database.sqlite.SQLiteDatabase;
+import android.database.sqlite.SQLiteException;
 import android.database.sqlite.SQLiteOpenHelper;
+import android.database.sqlite.SQLiteStatement;
 import android.support.annotation.NonNull;
-import android.support.v4.util.SparseArrayCompat;
+import android.support.annotation.Nullable;
 import android.util.Log;
 
-import com.dm.material.dashboard.candybar.helpers.TimeHelper;
+import com.danimahardhika.android.helpers.core.TimeHelper;
+import com.dm.material.dashboard.candybar.helpers.JsonHelper;
 import com.dm.material.dashboard.candybar.items.Request;
 import com.dm.material.dashboard.candybar.items.Wallpaper;
-import com.dm.material.dashboard.candybar.items.WallpaperJSON;
-import com.dm.material.dashboard.candybar.utils.Tag;
+import com.dm.material.dashboard.candybar.preferences.Preferences;
+import com.danimahardhika.android.helpers.core.utils.LogUtil;
+import com.nostra13.universalimageloader.core.assist.ImageSize;
 
+import java.lang.ref.WeakReference;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -39,7 +44,7 @@ import java.util.List;
 public class Database extends SQLiteOpenHelper {
 
     private static final String DATABASE_NAME = "candybar_database";
-    private static final int DATABASE_VERSION = 3;
+    private static final int DATABASE_VERSION = 9;
 
     private static final String TABLE_REQUEST = "icon_request";
     private static final String TABLE_PREMIUM_REQUEST = "premium_request";
@@ -49,7 +54,6 @@ public class Database extends SQLiteOpenHelper {
 
     private static final String KEY_ORDER_ID = "order_id";
     private static final String KEY_PRODUCT_ID = "product_id";
-    private static final String KEY_REQUEST = "request";
 
     private static final String KEY_NAME = "name";
     private static final String KEY_ACTIVITY = "activity";
@@ -59,9 +63,27 @@ public class Database extends SQLiteOpenHelper {
     private static final String KEY_THUMB_URL = "thumbUrl";
     private static final String KEY_URL = "url";
     private static final String KEY_ADDED_ON = "added_on";
+    private static final String KEY_MIME_TYPE = "mimeType";
+    private static final String KEY_COLOR = "color";
+    private static final String KEY_WIDTH = "width";
+    private static final String KEY_HEIGHT = "height";
+    private static final String KEY_SIZE = "size";
 
-    public Database(@NonNull Context context) {
+    private final Context mContext;
+
+    private static WeakReference<Database> mDatabase;
+    private SQLiteDatabase mSQLiteDatabase;
+
+    public static Database get(@NonNull Context context) {
+        if (mDatabase == null || mDatabase.get() == null) {
+            mDatabase = new WeakReference<>(new Database(context));
+        }
+        return mDatabase.get();
+    }
+
+    private Database(Context context) {
         super(context, DATABASE_NAME, null, DATABASE_VERSION);
+        mContext = context;
     }
 
     @Override
@@ -69,21 +91,30 @@ public class Database extends SQLiteOpenHelper {
         String CREATE_TABLE_REQUEST = "CREATE TABLE IF NOT EXISTS " +TABLE_REQUEST+ "(" +
                 KEY_ID + " INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
                 KEY_NAME + " TEXT NOT NULL, " +
-                KEY_ACTIVITY + " TEXT NOT NULL UNIQUE, " +
-                KEY_REQUESTED_ON + " DATETIME DEFAULT CURRENT_TIMESTAMP" + ")";
+                KEY_ACTIVITY + " TEXT NOT NULL, " +
+                KEY_REQUESTED_ON + " DATETIME DEFAULT CURRENT_TIMESTAMP, " +
+                "UNIQUE (" +KEY_ACTIVITY+ ") ON CONFLICT REPLACE)";
         String CREATE_TABLE_PREMIUM_REQUEST = "CREATE TABLE IF NOT EXISTS " +TABLE_PREMIUM_REQUEST+ "(" +
                 KEY_ID + " INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
                 KEY_ORDER_ID + " TEXT NOT NULL, " +
                 KEY_PRODUCT_ID + " TEXT NOT NULL, " +
-                KEY_REQUEST + " TEXT NOT NULL, " +
-                KEY_REQUESTED_ON + " DATETIME DEFAULT CURRENT_TIMESTAMP" + ")";
+                KEY_NAME + " TEXT NOT NULL, " +
+                KEY_ACTIVITY + " TEXT NOT NULL, " +
+                KEY_REQUESTED_ON + " DATETIME DEFAULT CURRENT_TIMESTAMP, " +
+                "UNIQUE (" +KEY_ACTIVITY+ ") ON CONFLICT REPLACE)";
         String CREATE_TABLE_WALLPAPER = "CREATE TABLE IF NOT EXISTS " +TABLE_WALLPAPERS+ "(" +
                 KEY_ID + " INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
                 KEY_NAME+ " TEXT NOT NULL, " +
                 KEY_AUTHOR + " TEXT NOT NULL, " +
-                KEY_URL + " TEXT NOT NULL UNIQUE, " +
+                KEY_URL + " TEXT NOT NULL, " +
                 KEY_THUMB_URL + " TEXT NOT NULL, " +
-                KEY_ADDED_ON + " TEXT NOT NULL" + ")";
+                KEY_MIME_TYPE + " TEXT, " +
+                KEY_SIZE + " INTEGER DEFAULT 0, " +
+                KEY_COLOR + " INTEGER DEFAULT 0, " +
+                KEY_WIDTH + " INTEGER DEFAULT 0, " +
+                KEY_HEIGHT + " INTEGER DEFAULT 0, " +
+                KEY_ADDED_ON + " TEXT NOT NULL, " +
+                "UNIQUE (" +KEY_URL+ "))";
         db.execSQL(CREATE_TABLE_REQUEST);
         db.execSQL(CREATE_TABLE_PREMIUM_REQUEST);
         db.execSQL(CREATE_TABLE_WALLPAPER);
@@ -91,26 +122,32 @@ public class Database extends SQLiteOpenHelper {
 
     @Override
     public void onUpgrade(SQLiteDatabase db, int oldVersion, int newVersion) {
-        resetDatabase(db);
+        /*
+         * Need to clear shared preferences with version 3.4.0
+         */
+        if (newVersion == 9) {
+            Preferences.get(mContext).clearPreferences();
+        }
+        resetDatabase(db, oldVersion);
     }
 
     @Override
     public void onDowngrade(SQLiteDatabase db, int oldVersion, int newVersion) {
-        resetDatabase(db);
+        resetDatabase(db, oldVersion);
     }
 
-    private void resetDatabase(SQLiteDatabase db) {
+    private void resetDatabase(SQLiteDatabase db, int oldVersion) {
         Cursor cursor = db.rawQuery("SELECT name FROM sqlite_master WHERE type=\'table\'", null);
-        SparseArrayCompat<String> tables = new SparseArrayCompat<>();
+        List<String> tables = new ArrayList<>();
         if (cursor.moveToFirst()) {
             do {
-                tables.append(tables.size(), cursor.getString(0));
+                tables.add(cursor.getString(0));
             } while (cursor.moveToNext());
         }
         cursor.close();
 
-        SparseArrayCompat<Request> requests = getRequestedApps(db);
-        SparseArrayCompat<Request> premiumRequest = getPremiumRequest(db);
+        List<Request> requests = getRequestedApps(db);
+        List<Request> premiumRequest = getPremiumRequest(db);
 
         for (int i = 0; i < tables.size(); i++) {
             try {
@@ -121,240 +158,416 @@ public class Database extends SQLiteOpenHelper {
         }
         onCreate(db);
 
-        for (int i = 0; i < requests.size(); i++) {
-            addRequest(db,
-                    requests.get(i).getName(),
-                    requests.get(i).getPackageName(),
-                    requests.get(i).getActivity());
+        for (Request request : requests) {
+            addRequest(db, request);
         }
 
-        for (int i = 0; i < premiumRequest.size(); i++) {
-            addPremiumRequest(db,
-                    premiumRequest.get(i).getOrderId(),
-                    premiumRequest.get(i).getProductId(),
-                    premiumRequest.get(i).getRequest(),
-                    premiumRequest.get(i).getRequestedOn());
+        if (oldVersion <= 3) {
+            return;
+        }
+
+        for (Request premium : premiumRequest) {
+            Request r = Request.Builder()
+                    .name(premium.getName())
+                    .activity(premium.getActivity())
+                    .orderId(premium.getOrderId())
+                    .productId(premium.getProductId())
+                    .requestedOn(premium.getRequestedOn())
+                    .build();
+            addPremiumRequest(db, r);
         }
     }
 
-    public void addRequest(String name, String activity, String requestedOn) {
-        SQLiteDatabase db = this.getWritableDatabase();
-        ContentValues values = new ContentValues();
-        values.put(KEY_NAME, name);
-        values.put(KEY_ACTIVITY, activity);
-        if (requestedOn != null) values.put(KEY_REQUESTED_ON, requestedOn);
-
-        db.insert(TABLE_REQUEST, null, values);
-        db.close();
-    }
-
-    private void addRequest(SQLiteDatabase db, String name, String activity, String requestedOn) {
-        if (db == null) return;
+    public boolean openDatabase() {
         try {
-            ContentValues values = new ContentValues();
-            values.put(KEY_NAME, name);
-            values.put(KEY_ACTIVITY, activity);
-            if (requestedOn != null) values.put(KEY_REQUESTED_ON, requestedOn);
+            if (mDatabase == null || mDatabase.get() == null) {
+                LogUtil.e("Database error: openDatabase() database instance is null");
+                return false;
+            }
 
-            db.insert(TABLE_REQUEST, null, values);
-        } catch (Exception e) {
-            Log.d(Tag.LOG_TAG, Log.getStackTraceString(e));
+            if (mDatabase.get().mSQLiteDatabase == null) {
+                mDatabase.get().mSQLiteDatabase = mDatabase.get().getWritableDatabase();
+            }
+
+            if (!mDatabase.get().mSQLiteDatabase.isOpen()) {
+                LogUtil.e("Database error: database openable false, trying to open the database again");
+                mDatabase.get().mSQLiteDatabase = mDatabase.get().getWritableDatabase();
+            }
+            return mDatabase.get().mSQLiteDatabase.isOpen();
+        } catch (SQLiteException | NullPointerException e) {
+            LogUtil.e(Log.getStackTraceString(e));
+            return false;
         }
+    }
+
+    public boolean closeDatabase() {
+        try {
+            if (mDatabase == null || mDatabase.get() == null) {
+                LogUtil.e("Database error: closeDatabase() database instance is null");
+                return false;
+            }
+
+            if (mDatabase.get().mSQLiteDatabase == null) {
+                LogUtil.e("Database error: trying to close database which is not opened");
+                return false;
+            }
+            mDatabase.get().mSQLiteDatabase.close();
+            return true;
+        } catch (SQLiteException | NullPointerException e) {
+            LogUtil.e(Log.getStackTraceString(e));
+            return false;
+        }
+    }
+
+    public void addRequest(@Nullable SQLiteDatabase db, Request request) {
+        SQLiteDatabase database = db;
+        if (database == null) {
+            if (!openDatabase()) {
+                LogUtil.e("Database error: addRequest() failed to open database");
+                return;
+            }
+
+            database = mDatabase.get().mSQLiteDatabase;
+        }
+
+        ContentValues values = new ContentValues();
+        values.put(KEY_NAME, request.getName());
+        values.put(KEY_ACTIVITY, request.getActivity());
+
+        String requestedOn = request.getRequestedOn();
+        if (requestedOn == null) requestedOn = TimeHelper.getLongDateTime();
+        values.put(KEY_REQUESTED_ON, requestedOn);
+
+        database.insert(TABLE_REQUEST, null, values);
     }
 
     public boolean isRequested(String activity) {
-        SQLiteDatabase db = this.getReadableDatabase();
-        Cursor cursor = db.query(TABLE_REQUEST, null, KEY_ACTIVITY + " = ?",
+        if (!openDatabase()) {
+            LogUtil.e("Database error: isRequested() failed to open database");
+            return false;
+        }
+
+        Cursor cursor = mDatabase.get().mSQLiteDatabase.query(TABLE_REQUEST, null, KEY_ACTIVITY + " = ?",
                 new String[]{activity}, null, null, null, null);
         int rowCount = cursor.getCount();
         cursor.close();
-        db.close();
         return rowCount > 0;
     }
 
-    private SparseArrayCompat<Request> getRequestedApps(SQLiteDatabase db) {
-        SparseArrayCompat<Request> requests = new SparseArrayCompat<>();
-        if (db == null) return requests;
-        try {
-            Cursor cursor = db.query(TABLE_REQUEST, null, null, null, null, null, null);
-            if (cursor.moveToFirst()) {
-                do {
-                    Request request = new Request(
-                            cursor.getString(1),
-                            cursor.getString(2),
-                            cursor.getString(3),
-                            true);
-                    requests.append(requests.size(), request);
-                } while (cursor.moveToNext());
+    private List<Request> getRequestedApps(@Nullable SQLiteDatabase db) {
+        SQLiteDatabase database = db;
+        if (database == null) {
+            if (!openDatabase()) {
+                LogUtil.e("Database error: getRequestedApps() failed to open database");
+                return new ArrayList<>();
             }
-            cursor.close();
-        } catch (Exception e) {
-            Log.d(Tag.LOG_TAG, Log.getStackTraceString(e));
+
+            database = mDatabase.get().mSQLiteDatabase;
         }
-        return requests;
-    }
 
-    public void addPremiumRequest(String orderId, String productId, String request) {
-        SQLiteDatabase db = this.getWritableDatabase();
-        ContentValues values = new ContentValues();
-        values.put(KEY_ORDER_ID, orderId);
-        values.put(KEY_PRODUCT_ID, productId);
-        values.put(KEY_REQUEST, request);
-
-        db.insert(TABLE_PREMIUM_REQUEST, null, values);
-        db.close();
-    }
-
-    private void addPremiumRequest(SQLiteDatabase db, String orderId, String productId, String request, String requestedOn) {
-        if (db == null) return;
-        try {
-            ContentValues values = new ContentValues();
-            values.put(KEY_ORDER_ID, orderId);
-            values.put(KEY_PRODUCT_ID, productId);
-            values.put(KEY_REQUEST, request);
-            values.put(KEY_REQUESTED_ON, requestedOn);
-
-            db.insert(TABLE_PREMIUM_REQUEST, null, values);
-        } catch (Exception e) {
-            Log.d(Tag.LOG_TAG, Log.getStackTraceString(e));
-        }
-    }
-
-    public SparseArrayCompat<Request> getPremiumRequest() {
-        SparseArrayCompat<Request> requests = new SparseArrayCompat<>();
-        SQLiteDatabase db = this.getReadableDatabase();
-        Cursor cursor = db.query(TABLE_PREMIUM_REQUEST,
-                null, null, null, null, null, null);
+        List<Request> requests = new ArrayList<>();
+        Cursor cursor = database.query(TABLE_REQUEST, null, null, null, null, null, null);
         if (cursor.moveToFirst()) {
             do {
-                Request request = new Request(
-                        cursor.getString(1),
-                        cursor.getString(2),
-                        cursor.getString(3),
-                        cursor.getString(4));
-                requests.append(requests.size(), request);
+                Request request = Request.Builder()
+                        .name(cursor.getString(cursor.getColumnIndex(KEY_NAME)))
+                        .activity(cursor.getString(cursor.getColumnIndex(KEY_ACTIVITY)))
+                        .requestedOn(cursor.getString(cursor.getColumnIndex(KEY_REQUESTED_ON)))
+                        .requested(true)
+                        .build();
+
+                requests.add(request);
             } while (cursor.moveToNext());
         }
         cursor.close();
-        db.close();
         return requests;
     }
 
-    private SparseArrayCompat<Request> getPremiumRequest(SQLiteDatabase db) {
-        SparseArrayCompat<Request> requests = new SparseArrayCompat<>();
-        if (db == null) return requests;
-        try {
-            Cursor cursor = db.query(TABLE_PREMIUM_REQUEST,
-                    null, null, null, null, null, null);
-            if (cursor.moveToFirst()) {
-                do {
-                    Request request = new Request(
-                            cursor.getString(1),
-                            cursor.getString(2),
-                            cursor.getString(3),
-                            cursor.getString(4));
-                    requests.append(requests.size(), request);
-                } while (cursor.moveToNext());
+    public void addPremiumRequest(@Nullable SQLiteDatabase db, Request request) {
+        SQLiteDatabase database = db;
+        if (database == null) {
+            if (!openDatabase()) {
+                LogUtil.e("Database error: addPremiumRequest() failed to open database");
+                return;
             }
-            cursor.close();
-        } catch (Exception e) {
-            Log.d(Tag.LOG_TAG, Log.getStackTraceString(e));
+
+            database = mDatabase.get().mSQLiteDatabase;
         }
+
+        ContentValues values = new ContentValues();
+        values.put(KEY_ORDER_ID, request.getOrderId());
+        values.put(KEY_PRODUCT_ID, request.getProductId());
+        values.put(KEY_NAME, request.getName());
+        values.put(KEY_ACTIVITY, request.getActivity());
+
+        String requestedOn = request.getRequestedOn();
+        if (requestedOn == null) requestedOn = TimeHelper.getLongDateTime();
+        values.put(KEY_REQUESTED_ON, requestedOn);
+
+        database.insert(TABLE_PREMIUM_REQUEST, null, values);
+    }
+
+    public List<Request> getPremiumRequest(@Nullable SQLiteDatabase db) {
+        SQLiteDatabase database = db;
+        if (database == null) {
+            if (!openDatabase()) {
+                LogUtil.e("Database error: getPremiumRequest() failed to open database");
+                return new ArrayList<>();
+            }
+
+            database = mDatabase.get().mSQLiteDatabase;
+        }
+
+        List<Request> requests = new ArrayList<>();
+
+        Cursor cursor = database.query(TABLE_PREMIUM_REQUEST,
+                null, null, null, null, null, null);
+        if (cursor.moveToFirst()) {
+            do {
+                Request request = Request.Builder()
+                        .name(cursor.getString(cursor.getColumnIndex(KEY_NAME)))
+                        .activity(cursor.getString(cursor.getColumnIndex(KEY_ACTIVITY)))
+                        .orderId(cursor.getString(cursor.getColumnIndex(KEY_ORDER_ID)))
+                        .productId(cursor.getString(cursor.getColumnIndex(KEY_PRODUCT_ID)))
+                        .build();
+                requests.add(request);
+            } while (cursor.moveToNext());
+        }
+        cursor.close();
         return requests;
     }
 
-    public void addWallpapers(WallpaperJSON wallpaper) {
-        SQLiteDatabase db = this.getWritableDatabase();
-        for (int i = 0; i < wallpaper.getWalls.size(); i++) {
-            ContentValues values = new ContentValues();
-            values.put(KEY_NAME, wallpaper.getWalls.get(i).name);
-            values.put(KEY_AUTHOR, wallpaper.getWalls.get(i).author);
-            values.put(KEY_URL, wallpaper.getWalls.get(i).url);
-            values.put(KEY_THUMB_URL, wallpaper.getWalls.get(i).thumbUrl);
-            values.put(KEY_ADDED_ON, TimeHelper.getDateTime());
-
-            db.insert(TABLE_WALLPAPERS, null, values);
+    public void addWallpapers(List<?> list) {
+        if (!openDatabase()) {
+            LogUtil.e("Database error: addWallpapers() failed to open database");
+            return;
         }
-        db.close();
+
+        String query = "INSERT OR IGNORE INTO " +TABLE_WALLPAPERS+ " (" +KEY_NAME+ "," +KEY_AUTHOR+ "," +KEY_URL+ ","
+                +KEY_THUMB_URL+ "," +KEY_ADDED_ON+ ") VALUES (?,?,?,?,?);";
+        SQLiteStatement statement = mDatabase.get().mSQLiteDatabase.compileStatement(query);
+        mDatabase.get().mSQLiteDatabase.beginTransaction();
+
+        for (int i = 0; i < list.size(); i++) {
+            statement.clearBindings();
+
+            Wallpaper wallpaper;
+            if (list.get(i) instanceof Wallpaper) {
+                wallpaper = (Wallpaper) list.get(i);
+            } else {
+                wallpaper = JsonHelper.getWallpaper(list.get(i));
+            }
+
+            if (wallpaper != null) {
+                if (wallpaper.getURL() != null) {
+                    String name = wallpaper.getName();
+                    if (name == null) name = "";
+
+                    statement.bindString(1, name);
+
+                    if (wallpaper.getAuthor() != null) {
+                        statement.bindString(2, wallpaper.getAuthor());
+                    } else {
+                        statement.bindNull(2);
+                    }
+
+                    statement.bindString(3, wallpaper.getURL());
+                    statement.bindString(4, wallpaper.getThumbUrl());
+                    statement.bindString(5, TimeHelper.getLongDateTime());
+                    statement.execute();
+                }
+            }
+        }
+        mDatabase.get().mSQLiteDatabase.setTransactionSuccessful();
+        mDatabase.get().mSQLiteDatabase.endTransaction();
     }
 
-    public void addWallpapers(List<Wallpaper> wallpapers) {
-        SQLiteDatabase db = this.getWritableDatabase();
-        for (int i = 0; i < wallpapers.size(); i++) {
-            ContentValues values = new ContentValues();
-            values.put(KEY_NAME, wallpapers.get(i).getName());
-            values.put(KEY_AUTHOR, wallpapers.get(i).getAuthor());
-            values.put(KEY_URL, wallpapers.get(i).getURL());
-            values.put(KEY_THUMB_URL, wallpapers.get(i).getThumbUrl());
-            values.put(KEY_ADDED_ON, TimeHelper.getDateTime());
-
-            db.insert(TABLE_WALLPAPERS, null, values);
+    public void updateWallpaper(Wallpaper wallpaper) {
+        if (!openDatabase()) {
+            LogUtil.e("Database error: updateWallpaper() failed to open database");
+            return;
         }
-        db.close();
+
+        if (wallpaper == null) return;
+
+        ContentValues values = new ContentValues();
+        if (wallpaper.getSize() > 0) {
+            values.put(KEY_SIZE, wallpaper.getSize());
+        }
+
+        if (wallpaper.getMimeType() != null) {
+            values.put(KEY_MIME_TYPE, wallpaper.getMimeType());
+        }
+
+        if (wallpaper.getDimensions() != null) {
+            values.put(KEY_WIDTH, wallpaper.getDimensions().getWidth());
+            values.put(KEY_HEIGHT, wallpaper.getDimensions().getHeight());
+        }
+
+        if (wallpaper.getColor() != 0) {
+            values.put(KEY_COLOR, wallpaper.getColor());
+        }
+
+        if (values.size() > 0) {
+            mDatabase.get().mSQLiteDatabase.update(TABLE_WALLPAPERS,
+                    values, KEY_URL +" = ?", new String[]{wallpaper.getURL()});
+        }
     }
 
     public int getWallpapersCount() {
-        SQLiteDatabase db = this.getReadableDatabase();
-        Cursor cursor = db.query(TABLE_WALLPAPERS, null, null, null, null, null, null, null);
+        if (!openDatabase()) {
+            LogUtil.e("Database error: getWallpapersCount() failed to open database");
+            return 0;
+        }
+
+        Cursor cursor = mDatabase.get().mSQLiteDatabase.query(TABLE_WALLPAPERS,
+                null, null, null, null, null, null, null);
         int rowCount = cursor.getCount();
         cursor.close();
-        db.close();
         return rowCount;
     }
 
+    @Nullable
+    public Wallpaper getWallpaper(String url) {
+        if (!openDatabase()) {
+            LogUtil.e("Database error: getWallpaper() failed to open database");
+            return null;
+        }
+
+        Wallpaper wallpaper = null;
+        Cursor cursor = mDatabase.get().mSQLiteDatabase.query(TABLE_WALLPAPERS,
+                null, KEY_URL +" = ?", new String[]{url}, null, null, null, "1");
+        if (cursor.moveToFirst()) {
+            do {
+                int width = cursor.getInt(cursor.getColumnIndex(KEY_WIDTH));
+                int height = cursor.getInt(cursor.getColumnIndex(KEY_HEIGHT));
+                ImageSize dimensions = null;
+                if (width  > 0 && height > 0) {
+                    dimensions = new ImageSize(width, height);
+                }
+
+                int id = cursor.getInt(cursor.getColumnIndex(KEY_ID));
+                String name = cursor.getString(cursor.getColumnIndex(KEY_NAME));
+                if (name.length() == 0) {
+                    name = "Wallpaper "+ id;
+                }
+
+                wallpaper = Wallpaper.Builder()
+                        .name(name)
+                        .author(cursor.getString(cursor.getColumnIndex(KEY_AUTHOR)))
+                        .url(cursor.getString(cursor.getColumnIndex(KEY_URL)))
+                        .thumbUrl(cursor.getString(cursor.getColumnIndex(KEY_THUMB_URL)))
+                        .dimensions(dimensions)
+                        .mimeType(cursor.getString(cursor.getColumnIndex(KEY_MIME_TYPE)))
+                        .size(cursor.getInt(cursor.getColumnIndex(KEY_SIZE)))
+                        .color(cursor.getInt(cursor.getColumnIndex(KEY_COLOR)))
+                        .build();
+            } while (cursor.moveToNext());
+        }
+        cursor.close();
+        return wallpaper;
+    }
+
     public List<Wallpaper> getWallpapers() {
+        if (!openDatabase()) {
+            LogUtil.e("Database error: getWallpapers() failed to open database");
+            return new ArrayList<>();
+        }
+
         List<Wallpaper> wallpapers = new ArrayList<>();
-        SQLiteDatabase db = this.getReadableDatabase();
-        Cursor cursor = db.query(TABLE_WALLPAPERS,
+        Cursor cursor = mDatabase.get().mSQLiteDatabase.query(TABLE_WALLPAPERS,
                 null, null, null, null, null, KEY_ADDED_ON + " DESC, " +KEY_ID);
         if (cursor.moveToFirst()) {
             do {
-                Wallpaper wallpaper = new Wallpaper(
-                        cursor.getString(1),
-                        cursor.getString(2),
-                        cursor.getString(3),
-                        cursor.getString(4));
+                int width = cursor.getInt(cursor.getColumnIndex(KEY_WIDTH));
+                int height = cursor.getInt(cursor.getColumnIndex(KEY_HEIGHT));
+                ImageSize dimensions = null;
+                if (width  > 0 && height > 0) {
+                    dimensions = new ImageSize(width, height);
+                }
+
+                int id = cursor.getInt(cursor.getColumnIndex(KEY_ID));
+                String name = cursor.getString(cursor.getColumnIndex(KEY_NAME));
+                if (name.length() == 0) {
+                    name = "Wallpaper "+ id;
+                }
+
+                Wallpaper wallpaper = Wallpaper.Builder()
+                        .name(name)
+                        .author(cursor.getString(cursor.getColumnIndex(KEY_AUTHOR)))
+                        .url(cursor.getString(cursor.getColumnIndex(KEY_URL)))
+                        .thumbUrl(cursor.getString(cursor.getColumnIndex(KEY_THUMB_URL)))
+                        .color(cursor.getInt(cursor.getColumnIndex(KEY_COLOR)))
+                        .mimeType(cursor.getString(cursor.getColumnIndex(KEY_MIME_TYPE)))
+                        .dimensions(dimensions)
+                        .size(cursor.getInt(cursor.getColumnIndex(KEY_SIZE)))
+                        .build();
                 wallpapers.add(wallpaper);
             } while (cursor.moveToNext());
         }
         cursor.close();
-        db.close();
         return wallpapers;
     }
 
+    @Nullable
     public Wallpaper getRandomWallpaper() {
+        if (!openDatabase()) {
+            LogUtil.e("Database error: getRandomWallpaper() failed to open database");
+            return null;
+        }
+
         Wallpaper wallpaper = null;
-        SQLiteDatabase db = this.getReadableDatabase();
-        String query = "SELECT * FROM " +TABLE_WALLPAPERS+ " ORDER BY RANDOM() LIMIT 1";
-        Cursor cursor = db.rawQuery(query, null);
+        Cursor cursor = mDatabase.get().mSQLiteDatabase.query(TABLE_WALLPAPERS,
+                null, null, null, null, null, "RANDOM()", "1");
         if (cursor.moveToFirst()) {
             do {
-                wallpaper = new Wallpaper(
-                        cursor.getString(1),
-                        cursor.getString(2),
-                        cursor.getString(3),
-                        cursor.getString(4));
+                int id = cursor.getInt(cursor.getColumnIndex(KEY_ID));
+                String name = cursor.getString(cursor.getColumnIndex(KEY_NAME));
+                if (name.length() == 0) {
+                    name = "Wallpaper "+ id;
+                }
+
+                wallpaper = Wallpaper.Builder()
+                        .name(name)
+                        .author(cursor.getString(cursor.getColumnIndex(KEY_AUTHOR)))
+                        .url(cursor.getString(cursor.getColumnIndex(KEY_URL)))
+                        .thumbUrl(cursor.getString(cursor.getColumnIndex(KEY_THUMB_URL)))
+                        .build();
             } while (cursor.moveToNext());
         }
         cursor.close();
-        db.close();
         return wallpaper;
     }
 
-    public void deleteWallpapers(List<Wallpaper> wallpapers) {
-        SQLiteDatabase db = this.getWritableDatabase();
-        for (int i = 0; i < wallpapers.size(); i++) {
-            db.delete(TABLE_WALLPAPERS, KEY_URL +" = ?",
-                    new String[]{wallpapers.get(i).getURL()});
+    public void deleteIconRequestData() {
+        if (!openDatabase()) {
+            LogUtil.e("Database error: deleteIconRequestData() failed to open database");
+            return;
         }
-        db.close();
+
+        mDatabase.get().mSQLiteDatabase.delete("SQLITE_SEQUENCE", "NAME = ?", new String[]{TABLE_REQUEST});
+        mDatabase.get().mSQLiteDatabase.delete(TABLE_REQUEST, null, null);
+    }
+
+    public void deleteWallpapers(List<Wallpaper> wallpapers) {
+        if (!openDatabase()) {
+            LogUtil.e("Database error: deleteWallpapers() failed to open database");
+            return;
+        }
+
+        for (Wallpaper wallpaper : wallpapers) {
+            mDatabase.get().mSQLiteDatabase.delete(TABLE_WALLPAPERS, KEY_URL +" = ?",
+                    new String[]{wallpaper.getURL()});
+        }
     }
 
     public void deleteWallpapers() {
-        SQLiteDatabase db = this.getWritableDatabase();
-        db.delete("SQLITE_SEQUENCE", "NAME = ?", new String[]{TABLE_WALLPAPERS});
-        db.delete(TABLE_WALLPAPERS, null, null);
-        db.close();
-    }
+        if (!openDatabase()) {
+            LogUtil.e("Database error: deleteWallpapers() failed to open database");
+            return;
+        }
 
+        mDatabase.get().mSQLiteDatabase.delete("SQLITE_SEQUENCE", "NAME = ?", new String[]{TABLE_WALLPAPERS});
+        mDatabase.get().mSQLiteDatabase.delete(TABLE_WALLPAPERS, null, null);
+    }
 }

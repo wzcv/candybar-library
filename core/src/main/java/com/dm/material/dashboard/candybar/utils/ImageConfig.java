@@ -4,7 +4,8 @@ import android.content.Context;
 import android.graphics.Bitmap;
 import android.support.annotation.NonNull;
 
-import com.dm.material.dashboard.candybar.R;
+import com.danimahardhika.android.helpers.core.FileHelper;
+import com.dm.material.dashboard.candybar.applications.CandyBarApplication;
 import com.nostra13.universalimageloader.cache.disc.impl.UnlimitedDiskCache;
 import com.nostra13.universalimageloader.core.DisplayImageOptions;
 import com.nostra13.universalimageloader.core.ImageLoaderConfiguration;
@@ -12,7 +13,6 @@ import com.nostra13.universalimageloader.core.assist.ImageScaleType;
 import com.nostra13.universalimageloader.core.assist.ImageSize;
 import com.nostra13.universalimageloader.core.assist.QueueProcessingType;
 import com.nostra13.universalimageloader.core.display.FadeInBitmapDisplayer;
-import com.nostra13.universalimageloader.utils.L;
 
 import java.io.File;
 
@@ -37,16 +37,14 @@ import java.io.File;
 public class ImageConfig {
 
     public static ImageLoaderConfiguration getImageLoaderConfiguration(@NonNull Context context) {
-        L.writeLogs(false);
-        L.writeDebugLogs(false);
         return new ImageLoaderConfiguration.Builder(context)
-                .diskCacheSize(100 * 1024 * 1024)
                 .threadPriority(Thread.NORM_PRIORITY - 2)
-                .threadPoolSize(3)
+                .threadPoolSize(4)
                 .tasksProcessingOrder(QueueProcessingType.FIFO)
-                .imageDownloader(new ImageDownloader(context))
                 .diskCache(new UnlimitedDiskCache(new File(
                         context.getCacheDir().toString() + "/uil-images")))
+                .diskCacheSize(256 * FileHelper.MB)
+                .memoryCacheSize(6 * FileHelper.MB)
                 .build();
     }
 
@@ -67,7 +65,7 @@ public class ImageConfig {
         options.delayBeforeLoading(10)
                 .bitmapConfig(Bitmap.Config.ARGB_8888)
                 .imageScaleType(ImageScaleType.EXACTLY_STRETCHED)
-                .cacheOnDisk(false)
+                .cacheOnDisk(true)
                 .cacheInMemory(false);
         return options.build();
     }
@@ -88,11 +86,9 @@ public class ImageConfig {
         return options;
     }
 
-    public static ImageSize getTargetSize(@NonNull Context context) {
-        int quality = context.getResources().getInteger(R.integer.wallpaper_grid_preview_quality);
-        if (quality <= 0) quality = 1;
+    public static ImageSize getThumbnailSize() {
+        int quality = CandyBarApplication.getConfiguration().getWallpaperGridPreviewQuality();
         return new ImageSize((50 * quality), (50 * quality));
     }
-
 }
 

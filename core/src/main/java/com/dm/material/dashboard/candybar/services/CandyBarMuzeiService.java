@@ -3,17 +3,16 @@ package com.dm.material.dashboard.candybar.services;
 import android.content.Intent;
 import android.net.Uri;
 import android.os.Bundle;
+import android.support.annotation.Nullable;
 import android.webkit.URLUtil;
 
+import com.dm.material.dashboard.candybar.R;
+import com.dm.material.dashboard.candybar.databases.Database;
 import com.google.android.apps.muzei.api.Artwork;
 import com.google.android.apps.muzei.api.RemoteMuzeiArtSource;
-import com.dm.material.dashboard.candybar.helpers.FileHelper;
 import com.dm.material.dashboard.candybar.helpers.MuzeiHelper;
-import com.dm.material.dashboard.candybar.helpers.WallpaperHelper;
 import com.dm.material.dashboard.candybar.items.Wallpaper;
 import com.dm.material.dashboard.candybar.preferences.Preferences;
-
-import java.io.File;
 
 /*
  * CandyBar - Material Dashboard
@@ -35,67 +34,57 @@ import java.io.File;
 
 public abstract class CandyBarMuzeiService extends RemoteMuzeiArtSource {
 
-    private MuzeiHelper mMuzeiHelper;
-
     public CandyBarMuzeiService(String name) {
         super(name);
     }
 
-    public void startCommand(Intent intent, int flags, int startId) {
-        Bundle bundle = intent.getExtras();
-        if (bundle != null) {
-            boolean restart = intent.getBooleanExtra("restart", false);
-            if (restart) {
-                try {
-                    onTryUpdate(UPDATE_REASON_USER_NEXT);
-                } catch (RetryException ignored) {}
-            }
+    @Override
+    public int onStartCommand(@Nullable Intent intent, int flags, int startId) {
+        if (intent == null || intent.getExtras() == null) {
+            return super.onStartCommand(intent, flags, startId);
         }
+
+        Bundle bundle = intent.getExtras();
+        boolean restart = bundle.getBoolean("restart", false);
+        if (restart) {
+            try {
+                onTryUpdate(UPDATE_REASON_USER_NEXT);
+            } catch (RetryException ignored) {}
+        }
+        return super.onStartCommand(intent, flags, startId);
     }
 
-    public void initMuzeiService() {
+    @Override
+    public void onCreate() {
         super.onCreate();
-        mMuzeiHelper = new MuzeiHelper(this,
-                WallpaperHelper.getDefaultWallpapersDirectory(this).toString());
         setUserCommands(BUILTIN_COMMAND_ID_NEXT_ARTWORK);
     }
 
-    public void tryUpdate(String wallpaperUrl) {
-        if (!URLUtil.isValidUrl(wallpaperUrl))
-            return;
-
+    @Override
+    protected void onTryUpdate(int reason) throws RetryException {
         try {
-            Wallpaper wallpaper = null;
-            if (Preferences.getPreferences(this).isDownloadedOnly())
-                wallpaper = mMuzeiHelper.getRandomDownloadedWallpaper();
+            if (!URLUtil.isValidUrl(getString(R.string.wallpaper_json)))
+                return;
 
-            if (wallpaper == null) {
-                if (Preferences.getPreferences(this).isDownloadedOnly())
-                    Preferences.getPreferences(this).setDownloadedOnly(false);
-                wallpaper = mMuzeiHelper.getRandomWallpaper(wallpaperUrl);
+            Wallpaper wallpaper = MuzeiHelper.getRandomWallpaper(this);
+
+            if (Preferences.get(this).isConnectedAsPreferred()) {
+                if (wallpaper != null) {
+                    Uri uri = Uri.parse(wallpaper.getURL());
+
+                    publishArtwork(new Artwork.Builder()
+                            .title(wallpaper.getName())
+                            .byline(wallpaper.getAuthor())
+                            .imageUri(uri)
+                            .build());
+
+                    scheduleUpdate(System.currentTimeMillis() +
+                            Preferences.get(this).getRotateTime());
+                }
             }
 
-            if (Preferences.getPreferences(this).isConnectedAsPreferred())
-                if (wallpaper != null) publishArtwork(wallpaper);
+            Database.get(this).closeDatabase();
         } catch (Exception ignored) {}
     }
-
-    private void publishArtwork(Wallpaper wallpaper) {
-        File file = new File(Preferences.getPreferences(this).getWallsDirectory()
-                + wallpaper.getName() + FileHelper.IMAGE_EXTENSION);
-        Uri uri = null;
-        if (file.exists()) uri = FileHelper.getUriFromFile(this, getPackageName(), file);
-        if (uri == null) uri = Uri.parse(wallpaper.getURL());
-
-        publishArtwork(new Artwork.Builder()
-                .title(wallpaper.getName())
-                .byline(wallpaper.getAuthor())
-                .imageUri(uri)
-                .build());
-
-        scheduleUpdate(System.currentTimeMillis() +
-                Preferences.getPreferences(this).getRotateTime());
-    }
-
 }
 

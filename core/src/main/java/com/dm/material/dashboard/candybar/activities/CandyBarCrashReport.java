@@ -8,10 +8,10 @@ import android.support.v7.app.AppCompatActivity;
 
 import com.afollestad.materialdialogs.MaterialDialog;
 
+import com.danimahardhika.android.helpers.core.FileHelper;
 import com.dm.material.dashboard.candybar.R;
 import com.dm.material.dashboard.candybar.helpers.DeviceHelper;
-import com.dm.material.dashboard.candybar.helpers.FileHelper;
-import com.dm.material.dashboard.candybar.helpers.PermissionHelper;
+import com.dm.material.dashboard.candybar.helpers.LocaleHelper;
 import com.dm.material.dashboard.candybar.helpers.ReportBugsHelper;
 
 import java.io.File;
@@ -48,12 +48,12 @@ public class CandyBarCrashReport extends AppCompatActivity {
                 return;
             }
 
+            LocaleHelper.setLocale(this);
+
             String stackTrace = bundle.getString(EXTRA_STACKTRACE);
             String deviceInfo = DeviceHelper.getDeviceInfoForCrashReport(this);
 
-            String message = getResources().getString(R.string.crash_report_message) +" "+
-                    getResources().getString(R.string.app_name) +" "+
-                    getResources().getString(R.string.crash_report_message_1);
+            String message = getResources().getString(R.string.crash_report_message, getResources().getString(R.string.app_name));
             new MaterialDialog.Builder(this)
                     .title(R.string.crash_report)
                     .content(message)
@@ -82,26 +82,18 @@ public class CandyBarCrashReport extends AppCompatActivity {
     }
 
     private Intent prepareUri(String deviceInfo, String stackTrace, Intent intent) {
-        String crashLog = ReportBugsHelper.buildCrashLog(this, getCacheDir(), stackTrace);
-        boolean granted = PermissionHelper.isPermissionStorageGranted(this);
+        File crashLog = ReportBugsHelper.buildCrashLog(this, stackTrace);
         if (crashLog != null) {
-            Uri uri = FileHelper.getUriFromFile(this, getPackageName(), new File(crashLog));
+            Uri uri = FileHelper.getUriFromFile(this, getPackageName(), crashLog);
             if (uri != null) {
                 intent.putExtra(Intent.EXTRA_TEXT, deviceInfo +"\n");
                 intent.putExtra(Intent.EXTRA_STREAM, uri);
                 intent.setFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
                 return intent;
-            } else {
-                if (granted) {
-                    uri = Uri.fromFile(new File(crashLog));
-                    intent.putExtra(Intent.EXTRA_STREAM, uri);
-                    return intent;
-                }
             }
         }
 
         intent.putExtra(Intent.EXTRA_TEXT, deviceInfo + stackTrace);
         return intent;
     }
-
 }

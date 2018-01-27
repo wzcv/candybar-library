@@ -2,31 +2,20 @@ package com.dm.material.dashboard.candybar.helpers;
 
 import android.content.Context;
 import android.content.res.Configuration;
-import android.content.res.Resources;
-import android.graphics.Color;
-import android.graphics.drawable.ColorDrawable;
-import android.graphics.drawable.Drawable;
-import android.graphics.drawable.TransitionDrawable;
+import android.graphics.Point;
 import android.os.Build;
-import android.support.annotation.AttrRes;
-import android.support.annotation.NonNull;
 import android.support.annotation.Nullable;
-import android.support.design.widget.AppBarLayout;
-import android.support.design.widget.CollapsingToolbarLayout;
 import android.support.design.widget.CoordinatorLayout;
-import android.support.design.widget.FloatingActionButton;
-import android.support.v4.view.ViewCompat;
-import android.support.v7.app.AppCompatActivity;
-import android.util.Log;
+import android.support.v7.view.ContextThemeWrapper;
 import android.view.View;
-import android.view.ViewGroup;
-import android.view.WindowManager;
-import android.widget.ImageView;
-import android.widget.LinearLayout;
-import android.widget.TextView;
 
-import com.dm.material.dashboard.candybar.utils.Animator;
-import com.dm.material.dashboard.candybar.utils.Tag;
+import com.danimahardhika.android.helpers.core.ColorHelper;
+import com.danimahardhika.android.helpers.core.WindowHelper;
+import com.dm.material.dashboard.candybar.R;
+import com.dm.material.dashboard.candybar.items.Home;
+import com.pluscubed.recyclerfastscroll.RecyclerFastScroller;
+
+import java.util.Locale;
 
 /*
  * CandyBar - Material Dashboard
@@ -48,153 +37,85 @@ import com.dm.material.dashboard.candybar.utils.Tag;
 
 public class ViewHelper {
 
-    private static final float PERCENTAGE_TO_SHOW_TOOLBAR_TITLE  = 0.85f;
-    private static final float PERCENTAGE_TO_HIDE_TITLE_CONTAINER = 0.7f;
-    private static final int ALPHA_ANIMATIONS_DURATION = 200;
+    public static void resetViewBottomMargin(@Nullable View view) {
+        if (view == null) return;
 
-    public static void resetNavigationBarTranslucent(@NonNull Context context, int orientation) {
+        Context context = ContextHelper.getBaseContext(view);
+        int orientation = context.getResources().getConfiguration().orientation;
+
+        if (!(view.getLayoutParams() instanceof CoordinatorLayout.LayoutParams))
+            return;
+
+        CoordinatorLayout.LayoutParams params = (CoordinatorLayout.LayoutParams) view.getLayoutParams();
+        int left = params.leftMargin;
+        int right = params.rightMargin;
+        int bottom = params.bottomMargin;
+        int top = params.topMargin;
+        int bottomNavBar = 0;
+        int rightNavBar = 0;
+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-            if (orientation == Configuration.ORIENTATION_PORTRAIT) {
-                ((AppCompatActivity) context).getWindow().addFlags(
-                        WindowManager.LayoutParams.FLAG_TRANSLUCENT_NAVIGATION);
-            } else if (orientation == Configuration.ORIENTATION_LANDSCAPE) {
-                ((AppCompatActivity) context).getWindow().clearFlags(
-                        WindowManager.LayoutParams.FLAG_TRANSLUCENT_NAVIGATION);
-                ColorHelper.setNavigationBarColor(context, Color.BLACK);
-            }
-        }
-    }
-
-    public static int getNavigationBarHeight(@NonNull Context context) {
-        Resources resources = context.getResources();
-        int orientation = resources.getConfiguration().orientation;
-        int resourceId = resources.getIdentifier(orientation == Configuration.ORIENTATION_PORTRAIT ?
-                "navigation_bar_height" : "navigation_bar_height_landscape", "dimen", "android");
-        if (resourceId > 0) {
-            return resources.getDimensionPixelSize(resourceId);
-        }
-        return 0;
-    }
-
-    public static void resetNavigationBarBottomMargin(@NonNull Context context, @Nullable View view,
-                                                      int orientation) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-            if (view != null) {
-                if (orientation == Configuration.ORIENTATION_PORTRAIT)
-                    view.setPadding(0, 0, 0, getNavigationBarHeight(context));
-                else
-                    view.setPadding(0, 0, 0, 0);
-            }
-        }
-    }
-
-    public static boolean handleToolbarTitleVisibility(@NonNull Context context, float percentage,
-                                                       boolean isToolbarTitleVisible,
-                                                       @NonNull View toolbarTitle) {
-        if (percentage >= PERCENTAGE_TO_SHOW_TOOLBAR_TITLE) {
-            if (!isToolbarTitleVisible) {
-                Animator.startAlphaAnimation(
-                        toolbarTitle, ALPHA_ANIMATIONS_DURATION, View.VISIBLE);
-                isToolbarTitleVisible = true;
-                ColorHelper.setTransparentStatusBar(context, Color.TRANSPARENT);
-                ColorHelper.setStatusBarIconColor(context);
-            }
-        } else {
-            if (isToolbarTitleVisible) {
-                Animator.startAlphaAnimation(
-                        toolbarTitle, ALPHA_ANIMATIONS_DURATION, View.INVISIBLE);
-                isToolbarTitleVisible = false;
-                ColorHelper.setTransparentStatusBar(context, Color.parseColor("#22000000"));
-                ColorHelper.setStatusBarIconColor(context);
-            }
-        }
-        return isToolbarTitleVisible;
-    }
-
-    public static boolean handleTitleContainerVisibility(float percentage, boolean isTitleContainerVisible,
-                                                         @NonNull View titleContainer, @NonNull FloatingActionButton fab) {
-        if (percentage >= PERCENTAGE_TO_HIDE_TITLE_CONTAINER) {
-            if (isTitleContainerVisible) {
-                Animator.startAlphaAnimation(titleContainer, ALPHA_ANIMATIONS_DURATION, View.INVISIBLE);
-                Animator.hideFab(fab);
-                isTitleContainerVisible = false;
-            }
-        } else {
-            if (!isTitleContainerVisible) {
-                Animator.startAlphaAnimation(titleContainer, ALPHA_ANIMATIONS_DURATION, View.VISIBLE);
-                Animator.showFab(fab);
-                isTitleContainerVisible = true;
-            }
-        }
-        return isTitleContainerVisible;
-    }
-
-    public static void disableAppBarDrag(@Nullable AppBarLayout appBar) {
-        if (appBar != null) {
-            if (ViewCompat.isLaidOut(appBar)) {
-                CoordinatorLayout.LayoutParams params = (CoordinatorLayout.LayoutParams)
-                        appBar.getLayoutParams();
-                AppBarLayout.Behavior behavior = (AppBarLayout.Behavior) params.getBehavior();
-                if (behavior != null) {
-                    behavior.setDragCallback(new AppBarLayout.Behavior.DragCallback() {
-                        @Override
-                        public boolean canDrag(@NonNull AppBarLayout appBarLayout) {
-                            return false;
-                        }
-                    });
-                }
+            boolean tabletMode = context.getResources().getBoolean(R.bool.android_helpers_tablet_mode);
+            if (tabletMode || orientation == Configuration.ORIENTATION_PORTRAIT) {
+                bottomNavBar = WindowHelper.getNavigationBarHeight(context);
             } else {
-                Log.d(Tag.LOG_TAG, "ViewCompat.isLaidOut(appBar) = false");
+                rightNavBar = WindowHelper.getNavigationBarHeight(context);
             }
         }
+
+        int navBar = WindowHelper.getNavigationBarHeight(context);
+        if ((bottom > bottomNavBar) && ((bottom - navBar) > 0))
+            bottom -= navBar;
+        if ((right > rightNavBar) && ((right - navBar) > 0))
+            right -= navBar;
+
+        params.setMargins(left, top, (right + rightNavBar), (bottom + bottomNavBar));
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN_MR1) {
+            params.setMarginEnd((right + rightNavBar));
+        }
+        view.setLayoutParams(params);
     }
 
-    public static void changeSearchViewTextColor(@Nullable View view, int text, int hint) {
-        if (view != null) {
-            if (view instanceof TextView) {
-                ((TextView) view).setTextColor(text);
-                ((TextView) view).setHintTextColor(hint);
-            } else if (view instanceof ViewGroup) {
-                ViewGroup viewGroup = (ViewGroup) view;
-                for (int i = 0; i < viewGroup.getChildCount(); i++) {
-                    changeSearchViewTextColor(viewGroup.getChildAt(i), text, hint);
-                }
-            }
+    public static void setFastScrollColor(@Nullable RecyclerFastScroller fastScroll) {
+        if (fastScroll == null) return;
+
+        Context context = fastScroll.getContext();
+        if (context instanceof ContextThemeWrapper) {
+            context = ((ContextThemeWrapper) context).getBaseContext();
+        }
+
+        int accent = ColorHelper.getAttributeColor(context, R.attr.colorAccent);
+
+        fastScroll.setBarColor(ColorHelper.setColorAlpha(accent, 0.8f));
+        fastScroll.setHandleNormalColor(accent);
+        fastScroll.setHandlePressedColor(ColorHelper.getDarkerColor(accent, 0.7f));
+    }
+
+    public static Point getWallpaperViewRatio(String viewStyle) {
+        switch (viewStyle.toLowerCase(Locale.getDefault())) {
+            case "square":
+                return new Point(1, 1);
+            case "landscape":
+                return new Point(16, 9);
+            case "portrait":
+                return new Point(4, 5);
+            default:
+                return new Point(1, 1);
         }
     }
 
-    public static void removeSearchViewSearchIcon(@Nullable View view) {
-        if (view != null) {
-            ImageView searchIcon = (ImageView) view;
-            ViewGroup linearLayoutSearchView = (ViewGroup) view.getParent();
-            if (linearLayoutSearchView != null) {
-                linearLayoutSearchView.removeView(searchIcon);
-                linearLayoutSearchView.addView(searchIcon);
-
-                searchIcon.setAdjustViewBounds(true);
-                searchIcon.setMaxWidth(0);
-                searchIcon.setLayoutParams(new LinearLayout.LayoutParams(
-                        LinearLayout.LayoutParams.WRAP_CONTENT,
-                        LinearLayout.LayoutParams.WRAP_CONTENT));
-                searchIcon.setImageDrawable(null);
-            }
+    public static Home.Style getHomeImageViewStyle(String viewStyle) {
+        switch (viewStyle.toLowerCase(Locale.getDefault())) {
+            case "card_square":
+                return new Home.Style(new Point(1, 1), Home.Style.Type.CARD_SQUARE);
+            case "card_landscape":
+                return new Home.Style(new Point(16, 9), Home.Style.Type.CARD_LANDSCAPE);
+            case "square":
+                return new Home.Style(new Point(1, 1), Home.Style.Type.SQUARE);
+            case "landscape":
+                return new Home.Style(new Point(16, 9), Home.Style.Type.LANDSCAPE);
+            default:
+                return new Home.Style(new Point(16, 9), Home.Style.Type.CARD_LANDSCAPE);
         }
     }
-
-    public static void changeSearchViewActionModeColor(@NonNull Context context, @Nullable View view,
-                                                       @AttrRes int original, @AttrRes int target) {
-        if (view != null) {
-            CollapsingToolbarLayout collapsingToolbar = (CollapsingToolbarLayout) view;
-            int originalColor = ColorHelper.getAttributeColor(context, original);
-            int targetColor = ColorHelper.getAttributeColor(context, target);
-
-            ColorDrawable cd1 = new ColorDrawable(originalColor);
-            ColorDrawable cd2 = new ColorDrawable(targetColor);
-
-            TransitionDrawable td = new TransitionDrawable(new Drawable[]{cd1, cd2});
-            collapsingToolbar.setContentScrim(td);
-            td.startTransition(200);
-        }
-    }
-
 }

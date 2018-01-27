@@ -11,7 +11,6 @@ import android.widget.TextView;
 
 import com.dm.material.dashboard.candybar.R;
 import com.dm.material.dashboard.candybar.items.InAppBilling;
-import com.dm.material.dashboard.candybar.preferences.Preferences;
 
 /*
  * CandyBar - Material Dashboard
@@ -88,21 +87,18 @@ public class InAppBillingAdapter extends BaseAdapter {
 
     private class ViewHolder {
 
-        final AppCompatRadioButton radio;
-        final TextView name;
-        final LinearLayout container;
+        private final AppCompatRadioButton radio;
+        private final TextView name;
+        private final LinearLayout container;
 
         ViewHolder(View view) {
-            radio = (AppCompatRadioButton) view.findViewById(R.id.radio);
-            name = (TextView) view.findViewById(R.id.name);
-            container = (LinearLayout) view.findViewById(R.id.container);
-            container.setBackgroundResource(Preferences.getPreferences(mContext).isDarkTheme() ?
-                    R.drawable.card_item_list_dark : R.drawable.card_item_list);
+            radio = view.findViewById(R.id.radio);
+            name = view.findViewById(R.id.name);
+            container = view.findViewById(R.id.container);
         }
     }
 
     public InAppBilling getSelectedProduct() {
         return mInAppBillings[mSelectedPosition];
     }
-
 }

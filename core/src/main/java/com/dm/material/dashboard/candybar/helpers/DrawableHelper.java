@@ -5,29 +5,17 @@ import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
 import android.content.res.Resources;
-import android.graphics.Bitmap;
-import android.graphics.Canvas;
-import android.graphics.Paint;
-import android.graphics.PorterDuff;
-import android.graphics.drawable.BitmapDrawable;
 import android.graphics.drawable.Drawable;
-import android.graphics.drawable.LayerDrawable;
 import android.os.Build;
-import android.support.annotation.ColorInt;
-import android.support.annotation.DrawableRes;
 import android.support.annotation.NonNull;
 import android.support.annotation.Nullable;
 import android.support.v4.content.ContextCompat;
 import android.support.v4.content.res.ResourcesCompat;
-import android.support.v4.graphics.drawable.DrawableCompat;
-import android.support.v7.widget.AppCompatDrawableManager;
 import android.util.DisplayMetrics;
 import android.util.Log;
 
 import com.dm.material.dashboard.candybar.R;
-import com.dm.material.dashboard.candybar.utils.Tag;
-
-import java.io.ByteArrayOutputStream;
+import com.danimahardhika.android.helpers.core.utils.LogUtil;
 
 /*
  * CandyBar - Material Dashboard
@@ -49,58 +37,6 @@ import java.io.ByteArrayOutputStream;
 
 public class DrawableHelper {
 
-    public static int getResourceId(@NonNull Context context, String resName) {
-        try {
-            return context.getResources().getIdentifier(
-                    resName, "drawable", context.getPackageName());
-        } catch (Exception ignored) {}
-        return -1;
-    }
-
-    @Nullable
-    public static Drawable getTintedDrawable(@NonNull Context context, @DrawableRes int res, @ColorInt int color) {
-        try {
-            Drawable drawable = AppCompatDrawableManager.get().getDrawable(context, res);
-            drawable.setColorFilter(color, PorterDuff.Mode.SRC_IN);
-            return drawable.mutate();
-        } catch (OutOfMemoryError e) {
-            return null;
-        }
-    }
-
-    @Nullable
-    public static Drawable getTintedDrawable(@NonNull Context context, @DrawableRes int res,
-                                             @ColorInt int color, int padding) {
-        try {
-            Drawable drawable = AppCompatDrawableManager.get().getDrawable(context, res);
-            drawable.setColorFilter(color, PorterDuff.Mode.SRC_IN);
-            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.LOLLIPOP) {
-                drawable = (DrawableCompat.wrap(drawable)).mutate();
-            }
-
-            Bitmap bitmap = Bitmap.createBitmap(drawable.getIntrinsicWidth(),
-                    drawable.getIntrinsicHeight(), Bitmap.Config.ARGB_8888);
-            Canvas canvas = new Canvas(bitmap);
-            drawable.setBounds(0, 0, canvas.getWidth(), canvas.getHeight());
-            drawable.draw(canvas);
-
-            Bitmap tintedBitmap = Bitmap.createBitmap(
-                    bitmap.getWidth() + padding,
-                    bitmap.getHeight() + padding,
-                    Bitmap.Config.ARGB_8888);
-            Canvas tintedCanvas = new Canvas(tintedBitmap);
-            Paint paint = new Paint();
-            paint.setFilterBitmap(true);
-            paint.setAntiAlias(true);
-            tintedCanvas.drawBitmap(bitmap,
-                    (tintedCanvas.getWidth() - bitmap.getWidth())/2,
-                    (tintedCanvas.getHeight() - bitmap.getHeight())/2, paint);
-            return new BitmapDrawable(context.getResources(), tintedBitmap);
-        } catch (Exception | OutOfMemoryError e) {
-            return null;
-        }
-    }
-
     public static Drawable getAppIcon(@NonNull Context context, ResolveInfo info) {
         try {
             return info.activityInfo.loadIcon(context.getPackageManager());
@@ -110,7 +46,7 @@ public class DrawableHelper {
     }
 
     @Nullable
-    public static Bitmap getHighQualityIcon(@NonNull Context context, String packageName) {
+    public static Drawable getHighQualityIcon(@NonNull Context context, String packageName) {
         try {
             PackageManager packageManager = context.getPackageManager();
             ApplicationInfo info = packageManager.getApplicationInfo(
@@ -124,35 +60,12 @@ public class DrawableHelper {
 
             Drawable drawable = ResourcesCompat.getDrawableForDensity(
                     resources, info.icon, density, null);
-            if (drawable != null) return ((BitmapDrawable) drawable).getBitmap();
+            if (drawable != null) return drawable;
+            return info.loadIcon(packageManager);
         } catch (Exception | OutOfMemoryError e) {
-            Log.d(Tag.LOG_TAG, Log.getStackTraceString(e));
+            LogUtil.e(Log.getStackTraceString(e));
         }
         return null;
     }
-
-    @Nullable
-    public static byte[] getBitmapByte(@NonNull Drawable drawable) {
-        try {
-            Bitmap bitmap;
-            if (drawable instanceof LayerDrawable) {
-                bitmap = Bitmap.createBitmap(
-                        drawable.getIntrinsicWidth(),
-                        drawable.getIntrinsicHeight(),
-                        Bitmap.Config.ARGB_8888);
-                drawable.setBounds(0, 0, drawable.getIntrinsicWidth(), drawable.getIntrinsicHeight());
-                drawable.draw(new Canvas(bitmap));
-            } else {
-                bitmap = ((BitmapDrawable) drawable).getBitmap();
-            }
-            ByteArrayOutputStream stream = new ByteArrayOutputStream();
-            bitmap.compress(Bitmap.CompressFormat.PNG, 10, stream);
-            return stream.toByteArray();
-        } catch (Exception | OutOfMemoryError e) {
-            Log.d(Tag.LOG_TAG, Log.getStackTraceString(e));
-        }
-        return null;
-    }
-
 }
 

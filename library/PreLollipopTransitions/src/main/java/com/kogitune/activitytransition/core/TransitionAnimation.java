@@ -24,6 +24,7 @@ import android.graphics.BitmapFactory;
 import android.graphics.drawable.BitmapDrawable;
 import android.os.Build;
 import android.os.Bundle;
+import android.support.v4.view.ViewCompat;
 import android.view.View;
 import android.view.ViewTreeObserver;
 import android.widget.ImageView;
@@ -31,8 +32,8 @@ import android.widget.ImageView;
 import java.lang.ref.WeakReference;
 
 public class TransitionAnimation {
+
     public static final Object lock = new Object();
-    private static final String TAG = "Transition";
     private static final int MAX_TIME_TO_WAIT = 3000;
     public static WeakReference<Bitmap> bitmapCache;
     public static boolean isImageFileReady = false;
@@ -46,7 +47,6 @@ public class TransitionAnimation {
         moveData.toView = toView;
         moveData.duration = duration;
         if (savedInstanceState == null) {
-
             ViewTreeObserver observer = toView.getViewTreeObserver();
             observer.addOnPreDrawListener(new ViewTreeObserver.OnPreDrawListener() {
 
@@ -94,8 +94,7 @@ public class TransitionAnimation {
                 while (!isImageFileReady) {
                     try {
                         lock.wait(MAX_TIME_TO_WAIT);
-                    } catch (InterruptedException e) {
-                    }
+                    } catch (InterruptedException ignored) {}
                 }
             }
             // Cant get bitmap by static field
@@ -111,11 +110,7 @@ public class TransitionAnimation {
             final ImageView toImageView = (ImageView) toView;
             toImageView.setImageBitmap(bitmap);
         } else {
-            if (Build.VERSION.SDK_INT > Build.VERSION_CODES.JELLY_BEAN) {
-                toView.setBackground(new BitmapDrawable(toView.getResources(), bitmap));
-            } else {
-                toView.setBackgroundDrawable(new BitmapDrawable(toView.getResources(), bitmap));
-            }
+            ViewCompat.setBackground(toView, new BitmapDrawable(toView.getResources(), bitmap));
         }
     }
 

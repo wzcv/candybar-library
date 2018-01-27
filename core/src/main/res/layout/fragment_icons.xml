@@ -1,25 +1,21 @@
 <?xml version="1.0" encoding="utf-8"?>
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
     tools:ignore="MissingPrefix"
     android:layout_width="match_parent"
     android:layout_height="match_parent">
 
-    <com.dm.material.dashboard.candybar.utils.views.AutoFitRecyclerView
+    <android.support.v7.widget.RecyclerView
         android:id="@+id/icons_grid"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:clipToPadding="false"
-        android:columnWidth="@dimen/icon_picker_column_width"/>
+        android:paddingTop="@dimen/content_padding"
+        android:paddingBottom="@dimen/content_padding"
+        android:clipToPadding="false" />
 
     <com.pluscubed.recyclerfastscroll.RecyclerFastScroller
         android:id="@+id/fastscroll"
         android:layout_width="wrap_content"
         android:layout_height="match_parent"
-        android:layout_gravity="end"
-        app:rfs_barColor="?android:attr/textColorSecondary"
-        app:rfs_handleNormalColor="?android:attr/textColorSecondary"
-        app:rfs_handlePressedColor="?attr/colorAccent"/>
-
+        android:layout_gravity="end"/>
 </FrameLayout>
